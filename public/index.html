@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Blow 'em Up Buddies</title>
+    <link rel="stylesheet" href="/style.css">
+
+    <style>
+        /* Mobile UI Layout & Halo HUD Overrides */
+        #btn-boost {
+            position: absolute !important;
+            bottom: 20px !important;
+            right: 20px !important;
+            width: 85px !important;
+            height: 85px !important;
+            border-radius: 50% !important;
+            font-size: 1rem !important;
+            z-index: 100;
+        }
+
+        #btn-jump {
+            position: absolute !important;
+            bottom: 115px !important;
+            right: 100px !important;
+            width: 65px !important;
+            height: 65px !important;
+            border-radius: 50% !important;
+            font-size: 0.75rem !important;
+            z-index: 100;
+        }
+
+        #btn-ability-swap {
+            position: absolute !important;
+            bottom: 185px !important;
+            right: 115px !important;
+            width: 45px !important;
+            height: 45px !important;
+            border-radius: 50% !important;
+            font-size: 0.6rem !important;
+            background: rgba(212, 74, 142, 0.8) !important; /* Pink accent */
+            border: 2px solid #fff !important;
+            color: #fff !important;
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+        }
+
+        #hud-bars {
+            top: 20px !important;
+            right: 20px !important;
+            bottom: auto !important;
+            left: auto !important;
+            transform: none !important;
+            width: 250px !important;
+            text-align: right !important;
+            z-index: 50;
+        }
+
+        #minimap {
+            top: 20px !important;
+            left: 20px !important;
+            right: auto !important;
+            border-radius: 12px !important; /* Tactical square instead of a circle */
+            border: 2px solid rgba(109, 203, 195, 0.5) !important;
+            box-shadow: 0 0 15px rgba(109, 203, 195, 0.2);
+        }
+
+        #btn-switch-seat {
+            position: absolute !important;
+            top: 20px !important;
+            left: 50% !important;
+            transform: translateX(-50%) !important;
+            background: rgba(15, 12, 27, 0.8) !important;
+            border: 2px solid var(--neon-cyan) !important;
+            color: #fff !important;
+            padding: 8px 16px !important;
+            border-radius: 20px !important;
+            font-weight: bold !important;
+            z-index: 100 !important;
+            letter-spacing: 1px !important;
+        }
+    </style>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+</head>
+<body>
+
+    <div id="ui-layer">
+        <div id="start-screen" class="screen interactive">
+            <div class="menu-card text-center">
+                <h1 class="game-title">BUDDIES</h1>
+                <div class="input-group">
+                    <label>CALLSIGN</label>
+                    <input type="text" id="input-name" placeholder="ENTER NAME" maxlength="12">
+                </div>
+                <button id="btn-host" class="primary-btn mt-20">HOST GAME</button>
+                <div class="divider"><span>OR</span></div>
+                <div class="input-group">
+                    <input type="text" id="input-code" placeholder="ROOM CODE" maxlength="4">
+                    <button id="btn-join" class="secondary-btn mt-10">JOIN ROOM</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="host-setup-screen" class="screen interactive hidden">
+            <button class="icon-btn back-btn" id="btn-cancel-host"><i class="ph ph-arrow-left"></i></button>
+            <button id="btn-confirm-host" class="circle-btn success-btn confirm-setup-btn"><i class="ph ph-check"></i></button>
+            <div class="host-controls">
+                <div class="selector-card">
+                    <button id="btn-map-prev">&lt;</button>
+                    <span id="lbl-setup-map">Shattered City</span>
+                    <button id="btn-map-next">&gt;</button>
+                </div>
+                <div class="selector-card">
+                    <button id="btn-tank-prev">&lt;</button>
+                    <span id="lbl-setup-tanks">6 Tanks</span>
+                    <button id="btn-tank-next">&gt;</button>
+                </div>
+                <div class="selector-card">
+                    <button id="btn-mode-prev">&lt;</button>
+                    <span id="lbl-setup-mode">Free-For-All</span>
+                    <button id="btn-mode-next">&gt;</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="lobby-screen" class="hub-container interactive hidden">
+            <div id="view-roster" class="hub-view">
+                <div class="hub-header">
+                    <button class="icon-btn" id="btn-leave-hub"><i class="ph ph-arrow-left"></i></button>
+                    <span id="lobby-code-display" class="room-code">ROOM: ----</span>
+                    <button class="text-btn" id="btn-open-garage" style="font-weight:bold; color:var(--neon-green);">CUSTOMIZE <i class="ph ph-arrow-right"></i></button>
+                </div>
+                <div class="roster-grid" id="roster-grid"></div>
+                <div class="action-footer">
+                    <button id="btn-ready" class="primary-btn">READY UP</button>
+                    <button id="btn-launch" class="success-btn hidden">LAUNCH MATCH</button>
+                </div>
+            </div>
+
+            <div id="view-garage" class="hub-view hidden">
+                <div class="hub-header">
+                    <button class="icon-btn" id="btn-close-garage"><i class="ph ph-arrow-left"></i></button>
+                    <h3 class="garage-title">WORKSHOP</h3>
+                </div>
+                <div class="garage-content">
+                    <div class="combined-picker">
+                        <label>TURRET & BARREL</label>
+                        <div class="picker-controls">
+                            <button id="btn-top-prev">&lt;</button>
+                            <span id="lbl-top-part">Assault Package</span>
+                            <button id="btn-top-next">&gt;</button>
+                        </div>
+                    </div>
+                    <div class="combined-picker">
+                        <label>CHASSIS & TREADS</label>
+                        <div class="picker-controls">
+                            <button id="btn-bottom-prev">&lt;</button>
+                            <span id="lbl-bottom-part">Heavy Tracker</span>
+                            <button id="btn-bottom-next">&gt;</button>
+                        </div>
+                    </div>
+                    <label class="mt-10">PAINT JOB</label>
+                    <div class="color-palette" id="color-palette"></div>
+                </div>
+            </div>
+        </div>
+
+        <button id="btn-switch-seat" class="interactive hidden">SWAP SEAT</button>
+        <div id="crosshair" class="hidden"></div>
+        <div id="joy-base" class="joystick-base hidden"><div id="joy-nub" class="joystick-nub"></div></div>
+
+        <div id="btn-boost" class="action-button interactive hidden">BOOST</div>
+        <div id="btn-jump" class="action-button interactive hidden">JUMP</div>
+        <div id="btn-ability-swap" class="interactive hidden">SWAP</div>
+
+        <canvas id="minimap" width="120" height="120" class="hidden" style="position: absolute; background: rgba(15, 12, 27, 0.8); z-index: 100;"></canvas>
+
+        <div id="hud-bars" class="hidden" style="position: absolute; pointer-events: none;">
+            <div id="bar-label" style="color: var(--neon-green); font-size: 0.85rem; font-weight: bold; margin-bottom: 5px; text-shadow: 0 0 4px #000; letter-spacing: 1px;">BOOST CAPACITY</div>
+            <div style="width: 100%; height: 14px; background: rgba(0,0,0,0.6); border: 2px solid rgba(255,255,255,0.2); border-radius: 4px; overflow: hidden; box-shadow: 0 0 10px rgba(0,0,0,0.5);">
+                <div id="bar-fill" style="width: 100%; height: 100%; float: right; background: var(--neon-green); transition: width 0.1s linear, background-color 0.2s;"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/map-builder.js"></script>
+    <script src="/environment.js"></script>
+    <script src="/maps.js"></script>
+    <script src="/tank-factory.js"></script>
+    <script src="/lobby.js"></script>
+    <script src="/graphics.js"></script>
+    <script src="/controls.js"></script>
+    <script src="/network.js"></script>
+    <script src="/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,292 @@
+// game-engine.js
+const THREE = require('three');
+const { ServerTank } = require('./driver');
+const { getTerrainHeight } = require('./maps');
+const env = require('./environment');
+
+const trunc2 = (val) => Math.round(val * 100) / 100;
+const trunc1 = (val) => Math.round(val * 10) / 10;
+
+class Match {
+    constructor(roomId, configs, mode, mapName) {
+        this.roomId = roomId;
+        this.mode = mode || 'FFA';
+        this.mapName = mapName || 'bowl';
+
+        // FIXED: Dynamically spawn exact tanks based on configs
+        this.tanks = {};
+        if (configs) {
+            let i = 0;
+            let totalTanks = Object.keys(configs).length;
+            for (let tId in configs) {
+                let num = parseInt(tId.replace('tank', ''));
+
+                // If it's a team match, split them evenly. If FFA, everyone is their own team!
+                let team = (this.mode === '3v3') ? (num <= Math.ceil(totalTanks / 2) ? 1 : 2) : num;
+                let slotIndex = i % 3;
+
+                this.tanks[tId] = new ServerTank(tId, configs[tId], this.mapName, team, slotIndex);
+                i++;
+            }
+        }
+        this.playerMapping = {};
+
+        this.bullets = [];
+        this.blastZones = [];
+        this.explosions = [];
+        this.hits = [];
+        this.shutters = this.mapName === 'geometric_gauntlet' ? JSON.parse(JSON.stringify(env.GAUNTLET_PROPS.shutters)) : [];
+    }
+
+    getTeam(tankId) {
+        if (this.mode === 'FFA') return parseInt(tankId.replace('tank', ''));
+
+        let num = parseInt(tankId.replace('tank', ''));
+        let totalTanks = Object.keys(this.tanks).length;
+        return num <= Math.ceil(totalTanks / 2) ? 1 : 2;
+    }
+
+    assignPlayer(socketId, tankId, role) {
+        this.playerMapping[socketId] = { tankId, role };
+        if (tankId && this.tanks[tankId]) {
+            if (role === 'driver') this.tanks[tankId].driverId = socketId;
+            if (role === 'gunner') this.tanks[tankId].gunnerId = socketId;
+        }
+    }
+
+    removePlayer(socketId) {
+        const mapping = this.playerMapping[socketId];
+        if (mapping && mapping.tankId && this.tanks[mapping.tankId]) {
+            if (mapping.role === 'driver') this.tanks[mapping.tankId].driverId = null;
+            if (mapping.role === 'gunner') this.tanks[mapping.tankId].gunnerId = null;
+            delete this.playerMapping[socketId];
+        }
+    }
+
+    applyInput(socketId, input) {
+        const mapping = this.playerMapping[socketId];
+        if (mapping && mapping.role === 'spectator') return;
+
+        if (mapping && this.tanks[mapping.tankId]) {
+            const tank = this.tanks[mapping.tankId];
+            if (mapping.role === 'driver') {
+                tank.driverInputs.moveX = input.moveX;
+                tank.driverInputs.moveY = input.moveY;
+                tank.driverInputs.isBoosting = input.isBoosting;
+                if (input.triggerJump) tank.driverInputs.triggerJump = true;
+            } else if (mapping.role === 'gunner') {
+                tank.gunnerInputs.aimYaw = input.aimYaw;
+                tank.gunnerInputs.aimPitch = input.aimPitch;
+                tank.gunnerInputs.isFiring = input.isFiring;
+                if (input.triggerSecondary) tank.gunnerInputs.triggerSecondary = true;
+            }
+        }
+    }
+
+    swapSeats(tankId) {
+        const tank = this.tanks[tankId];
+        if (!tank) return;
+        const oldDriver = tank.driverId; const oldGunner = tank.gunnerId;
+        tank.driverId = oldGunner; tank.gunnerId = oldDriver;
+        if (oldGunner) this.playerMapping[oldGunner].role = 'driver';
+        if (oldDriver) this.playerMapping[oldDriver].role = 'gunner';
+    }
+
+    tick(delta) {
+        const state = { tanks: {}, assignments: this.playerMapping, mode: this.mode, map: this.mapName };
+        const tankIds = Object.keys(this.tanks);
+
+        this.explosions = [];
+        this.hits = [];
+
+        for (let id of tankIds) {
+            let t = this.tanks[id];
+            t.update(delta, this.tanks, this.mode, this.shutters);
+
+            let barrelBaseY = t.position.y + 2.2 + t.actualTurretYOffset;
+            let cameraY = t.position.y + 3.4 + t.actualTurretYOffset;
+
+            // --- FIRE THE CONCUSSIVE RAY ---
+            if (t.fireReady) {
+                let absYaw = t.turretYaw; let absPitch = t.turretPitch;
+                let camDirX = -Math.sin(absYaw) * Math.cos(absPitch);
+                let camDirY = Math.sin(absPitch);
+                let camDirZ = -Math.cos(absYaw) * Math.cos(absPitch);
+
+                let targetX = t.position.x + (camDirX * 40);
+                let targetY = cameraY + (camDirY * 40);
+                let targetZ = t.position.z + (camDirZ * 40);
+
+                let aimVecX = targetX - t.position.x; let aimVecY = targetY - barrelBaseY; let aimVecZ = targetZ - t.position.z;
+                let dist = Math.hypot(aimVecX, aimVecY, aimVecZ);
+
+                let dX = aimVecX / dist; let dY = aimVecY / dist; let dZ = aimVecZ / dist;
+                this.bullets.push({ owner: id, x: t.position.x + dX*4.5, y: barrelBaseY + dY*4.5, z: t.position.z + dZ*4.5, dx: dX, dy: dY, dz: dZ, life: 1.5 });
+            }
+        }
+
+        // --- RAYCAST CCD LOOP ---
+        for (let i = this.bullets.length - 1; i >= 0; i--) {
+            let b = this.bullets[i];
+            let oldX = b.x, oldY = b.y, oldZ = b.z;
+
+            b.x += b.dx * 180 * delta; b.y += b.dy * 180 * delta; b.z += b.dz * 180 * delta;
+            b.life -= delta;
+
+            let hit = false;
+            let segDx = b.x - oldX; let segDy = b.y - oldY; let segDz = b.z - oldZ;
+            let segLenSqXZ = segDx * segDx + segDz * segDz;
+
+            for (let tId in this.tanks) {
+                if (tId === b.owner || this.tanks[tId].isDead) continue;
+                let target = this.tanks[tId];
+
+                let t = 0;
+                if (segLenSqXZ > 0) t = Math.max(0, Math.min(1, ((target.position.x - oldX) * segDx + (target.position.z - oldZ) * segDz) / segLenSqXZ));
+                let cX = oldX + t * segDx, cZ = oldZ + t * segDz, cY = oldY + t * segDy;
+
+                if (Math.hypot(cX - target.position.x, cZ - target.position.z) < 3.0 && Math.abs(cY - target.position.y) < 3.0) {
+                    this.blastZones.push({ x: cX, y: cY, z: cZ, life: 1.2, owner: b.owner, hasPulsed: false });
+                    hit = true; break;
+                }
+            }
+
+            if (!hit && this.shutters) {
+                for (let s of this.shutters) {
+                    if (s.health <= 0) continue;
+                    let t = 0;
+                    if (segLenSqXZ > 0) t = Math.max(0, Math.min(1, ((s.x - oldX) * segDx + (s.z - oldZ) * segDz) / segLenSqXZ));
+                    let cX = oldX + t * segDx, cZ = oldZ + t * segDz, cY = oldY + t * segDy;
+
+                    if (Math.hypot(cX - s.x, cZ - s.z) < s.r && Math.abs(cY - s.y) < 5) {
+                        s.health -= 50;
+                        this.blastZones.push({ x: cX, y: cY, z: cZ, life: 1.2, owner: b.owner, hasPulsed: false });
+                        hit = true; break;
+                    }
+                }
+            }
+
+            if (!hit) {
+                let gY = getTerrainHeight(b.x, b.z, this.mapName);
+                if (b.y <= gY) {
+                    this.blastZones.push({ x: b.x, y: gY, z: b.z, life: 1.2, owner: b.owner, hasPulsed: false });
+                    hit = true;
+                }
+            }
+
+            if (hit || b.life <= 0) this.bullets.splice(i, 1);
+        }
+
+        // --- LINGERING CONCUSSIVE BARRIER PHYSICS ---
+        for (let i = this.blastZones.length - 1; i >= 0; i--) {
+            let z = this.blastZones[i];
+            z.life -= delta;
+
+            let radius = 25;
+
+            for (let tId in this.tanks) {
+                let target = this.tanks[tId];
+                if (target.isDead) continue;
+
+                let dx = target.position.x - z.x; let dy = target.position.y - z.y; let dz = target.position.z - z.z;
+                let dist = Math.hypot(dx, dy, dz);
+
+                if (dist < radius) {
+                    let intensity = 1 - (dist / radius);
+                    let pushDirX = dx / (dist || 1);
+                    let pushDirZ = dz / (dist || 1);
+
+                    if (!z.hasPulsed) {
+                        target.velocity.x += pushDirX * 14.0 * intensity;
+                        target.velocity.z += pushDirZ * 14.0 * intensity;
+                        target.velocity.y += 2.0 * intensity;
+                        target.isGrounded = false;
+
+                        let isTeammate = (this.mode === '3v3' && this.getTeam(tId) === this.getTeam(z.owner));
+                        if (!isTeammate) {
+                            target.health -= 95 * intensity;
+                            if (target.health <= 0) target.die();
+                        }
+                    } else {
+                        target.velocity.x += pushDirX * 1.5 * delta;
+                        target.velocity.z += pushDirZ * 1.5 * delta;
+                    }
+                }
+            }
+
+            z.hasPulsed = true;
+            if (z.life <= 0) this.blastZones.splice(i, 1);
+        }
+
+        for (let i = 0; i < tankIds.length; i++) {
+            for (let j = i + 1; j < tankIds.length; j++) {
+                let p1 = this.tanks[tankIds[i]]; let p2 = this.tanks[tankIds[j]];
+                if (p1.isDead || p2.isDead) continue;
+                let dx = p1.position.x - p2.position.x; let dz = p1.position.z - p2.position.z; let dy = p1.position.y - p2.position.y;
+                let dist = Math.hypot(dx, dz);
+                if (dist < 4.0 && Math.abs(dy) < 3.0) {
+                    if (dist === 0) { dx = 1; dz = 0; dist = 1; }
+                    let push = (4.0 - dist) * 0.5; let normX = dx / dist; let normZ = dz / dist;
+                    p1.position.x += normX * push; p1.position.z += normZ * push;
+                    p2.position.x -= normX * push; p2.position.z -= normZ * push;
+
+                    let p1Ramming = p1.driverInputs.isBoosting && Math.abs(p1.currentSpeed) > 85;
+                    let p2Ramming = p2.driverInputs.isBoosting && Math.abs(p2.currentSpeed) > 85;
+
+                    if (p1Ramming || p2Ramming) {
+                        let isTeammate = (this.mode === '3v3' && this.getTeam(tankIds[i]) === this.getTeam(tankIds[j]));
+                        let f1X = -Math.sin(p1.hullRotation); let f1Z = -Math.cos(p1.hullRotation);
+                        let f2X = -Math.sin(p2.hullRotation); let f2Z = -Math.cos(p2.hullRotation);
+                        let t1X = f1X * Math.sign(p1.currentSpeed); let t1Z = f1Z * Math.sign(p1.currentSpeed);
+                        let t2X = f2X * Math.sign(p2.currentSpeed); let t2Z = f2Z * Math.sign(p2.currentSpeed);
+                        let angleDot = t1X * t2X + t1Z * t2Z;
+
+                        if (p1Ramming && p2Ramming && angleDot < -0.5) {
+                            if (!isTeammate) { p1.health -= 50; p2.health -= 50; }
+                            if (p1.health <= 0) p1.die(); if (p2.health <= 0) p2.die();
+                            p1.velocity.x += t1X * -1.5; p1.velocity.z += t1Z * -1.5; p1.velocity.y = 0.4;
+                            p2.velocity.x += t2X * -1.5; p2.velocity.z += t2Z * -1.5; p2.velocity.y = 0.4;
+                            p1.currentSpeed = 0; p2.currentSpeed = 0;
+                        } else {
+                            let p1RammingP2 = (t1X * -normX + t1Z * -normZ) > 0.5; let p2RammingP1 = (t2X * normX + t2Z * normZ) > 0.5;
+                            if (p1Ramming && p1RammingP2 && !p2RammingP1) {
+                                if(!isTeammate) p2.die();
+                                p1.currentSpeed *= 0.5;
+                                p2.velocity.x -= normX * 1.5; p2.velocity.z -= normZ * 1.5; p2.velocity.y = 0.5;
+                            }
+                            else if (p2Ramming && p2RammingP1 && !p1RammingP2) {
+                                if(!isTeammate) p1.die();
+                                p2.currentSpeed *= 0.5;
+                                p1.velocity.x += normX * 1.5; p1.velocity.z += normZ * 1.5; p1.velocity.y = 0.5;
+                            }
+                            else { p1.currentSpeed *= 0.3; p2.currentSpeed *= 0.3; p1.velocity.x += normX * 0.5; p1.velocity.z += normZ * 0.5; p2.velocity.x -= normX * 0.5; p2.velocity.z -= normZ * 0.5; }
+                        }
+                    } else { p1.currentSpeed *= 0.8; p2.currentSpeed *= 0.8; }
+                }
+            }
+        }
+
+        for (let id of tankIds) state.tanks[id] = this.tanks[id].getNetworkState();
+
+        state.bullets = this.bullets.map(b => ({
+            x: trunc2(b.x), y: trunc2(b.y), z: trunc2(b.z),
+            dx: trunc2(b.dx), dy: trunc2(b.dy), dz: trunc2(b.dz)
+        }));
+
+        state.blastZones = this.blastZones.map(z => ({
+            x: trunc1(z.x), y: trunc1(z.y), z: trunc1(z.z), life: trunc2(z.life)
+        }));
+
+        state.hits = this.hits;
+        state.shutters = this.shutters;
+        return state;
+    }
+}
+
+const matches = {};
+module.exports = {
+    createMatch: (id, configs, mode, mapName) => matches[id] = new Match(id, configs, mode, mapName),
+    deleteMatch: (id) => delete matches[id],
+    getMatch: (id) => matches[id],
+    getAllMatches: () => matches
+};

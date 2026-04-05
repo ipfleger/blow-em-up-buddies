@@ -1,0 +1,116 @@
+/* public/style.css */
+
+:root {
+    --bg-color: transparent;
+    --panel-bg: rgba(15, 12, 27, 0.85);
+    --border-color: rgba(109, 203, 195, 0.3);
+
+    --neon-green: #b4d455;
+    --neon-pink: #ff3366;
+    --neon-cyan: #6dcbc3;
+    --neon-gold: #ffd700;
+
+    --text-main: #ffffff;
+    --text-dim: rgba(255, 255, 255, 0.5);
+    --font-stack: 'Courier New', Courier, monospace;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; user-select: none; font-family: var(--font-stack); }
+
+body, html { width: 100vw; height: 100vh; overflow: hidden; background: #0f0c1b; color: var(--text-main); touch-action: none; }
+
+#ui-layer { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 10; pointer-events: none; }
+.interactive { pointer-events: auto; }
+.hidden { display: none !important; }
+
+.text-center { text-align: center; }
+.mt-10 { margin-top: 10px; }
+.mt-20 { margin-top: 20px; }
+
+.game-title { color: var(--neon-pink); font-size: 2.5rem; text-shadow: 0 0 10px var(--neon-pink); margin-bottom: 20px; }
+label { color: var(--text-dim); font-size: 0.75rem; font-weight: bold; display: block; margin-bottom: 3px; text-align: left; }
+
+input[type="text"] {
+    width: 100%; padding: 10px; background: rgba(0,0,0,0.6); border: 2px solid var(--neon-cyan);
+    color: white; font-size: 1.1rem; text-transform: uppercase; border-radius: 6px; outline: none; text-align: center;
+}
+input[type="text"]::placeholder { color: var(--text-dim); }
+
+button { cursor: pointer; border: none; font-weight: bold; border-radius: 6px; padding: 10px 15px; font-size: 1rem; transition: 0.1s; width: 100%; }
+button:active { transform: scale(0.95); }
+
+.primary-btn { background: var(--neon-cyan); color: #000; }
+.secondary-btn { background: transparent; border: 2px solid var(--neon-cyan); color: var(--neon-cyan); }
+.success-btn { background: var(--neon-green); color: #000; }
+.icon-btn { background: rgba(0,0,0,0.5); border: 1px solid var(--text-dim); color: white; width: 35px; height: 35px; padding: 0; border-radius: 50%; display: flex; justify-content: center; align-items: center; }
+.text-btn { background: transparent; color: var(--text-main); width: auto; padding: 5px; }
+.text-btn:hover { color: var(--neon-cyan); }
+
+.screen { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; display: flex; justify-content: center; align-items: center; }
+.menu-card { background: var(--panel-bg); border: 1px solid var(--border-color); padding: 25px; border-radius: 12px; width: 320px; backdrop-filter: blur(10px); }
+.input-group { margin-bottom: 10px; }
+.divider { display: flex; align-items: center; text-align: center; margin: 15px 0; color: var(--text-dim); }
+.divider::before, .divider::after { content: ''; flex: 1; border-bottom: 1px dashed var(--border-color); }
+.divider span { padding: 0 10px; }
+
+/* Host Setup Controls */
+.back-btn { position: absolute; top: 20px; left: 20px; }
+.confirm-setup-btn { position: absolute; bottom: 180px; width: 220px; left: 50%; transform: translateX(-50%); box-shadow: 0 0 15px rgba(109, 203, 195, 0.4); }
+.confirm-setup-btn:active { transform: translateX(-50%) scale(0.95); }
+.host-controls { position: absolute; display: flex; flex-direction: column; gap: 8px; bottom: 20px; width: 90%; max-width: 400px; }
+.selector-card { background: var(--panel-bg); border: 1px solid var(--border-color); border-radius: 8px; display: flex; align-items: center; justify-content: space-between; padding: 10px; backdrop-filter: blur(10px); }
+.selector-card button { background: transparent; color: var(--neon-cyan); font-size: 1.2rem; width: 40px; padding: 0; }
+.selector-card span { font-weight: bold; text-align: center; flex-grow: 1; text-transform: uppercase; font-size: 1rem;}
+
+/* The Hub */
+.hub-container { position: absolute; background: var(--panel-bg); backdrop-filter: blur(10px); display: flex; flex-direction: column; overflow: hidden; }
+.hub-view { height: 100%; display: flex; flex-direction: column; width: 100%; }
+.hub-header { padding: 10px 15px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; }
+.room-code { color: var(--neon-cyan); font-weight: bold; font-size: 1.1rem; }
+.garage-title { color: var(--neon-cyan); flex-grow: 1; text-align: center; font-size: 1.1rem; margin: 0; }
+
+.roster-grid { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px; overflow-y: auto; justify-content: center; flex-grow: 1; align-content: flex-start; }
+.tank-icon-card { background: rgba(0,0,0,0.4); border: 1px solid var(--border-color); border-radius: 8px; padding: 8px; display: flex; flex-direction: column; align-items: center; position: relative; width: 100px; }
+.tank-graphic { width: 35px; height: 35px; display: flex; justify-content: center; align-items: center; margin-bottom: 5px; }
+.tank-graphic img { width: 100%; height: 100%; object-fit: contain; filter: brightness(0); opacity: 0.8; }
+.seats-container { display: flex; gap: 8px; width: 100%; justify-content: center; }
+.seat-circle { width: 28px; height: 28px; border-radius: 50%; border: 1px dashed var(--text-dim); color: var(--text-dim); display: flex; justify-content: center; align-items: center; font-size: 1rem; cursor: pointer; transition: 0.2s; }
+.seat-circle:hover { border-color: white; color: white; }
+.seat-circle.filled { border-style: solid; color: #000; font-size: 0.75rem; font-weight: bold; }
+.seat-circle.ready { border-color: var(--neon-gold); box-shadow: 0 0 10px var(--neon-gold); }
+.tank-ready-check { position: absolute; top: -8px; right: -8px; background: var(--neon-green); color: black; width: 20px; height: 20px; border-radius: 50%; display: flex; justify-content: center; align-items: center; font-weight: bold; font-size: 0.8rem; }
+
+.action-footer { padding: 10px 15px; border-top: 1px solid var(--border-color); display: flex; gap: 10px; }
+
+.garage-content { padding: 15px; flex-grow: 1; overflow-y: auto; }
+.combined-picker { margin-bottom: 12px; }
+.picker-controls { display: flex; align-items: center; background: rgba(0,0,0,0.5); border-radius: 6px; padding: 5px; margin-top: 3px;}
+.picker-controls button { background: transparent; color: var(--neon-cyan); font-size: 1.1rem; padding: 5px 10px; width: auto; }
+.picker-controls span { flex-grow: 1; text-align: center; font-size: 0.85rem; }
+.color-palette { display: flex; gap: 8px; overflow-x: auto; padding: 5px 0; }
+.color-swatch { width: 35px; height: 35px; border-radius: 50%; flex-shrink: 0; border: 2px solid transparent; cursor: pointer; transition: 0.1s; }
+.color-swatch.active { border-color: white; transform: scale(1.1); }
+
+.action-button { position: absolute; bottom: 20px; width: 80px; height: 80px; border-radius: 50%; background: rgba(109, 203, 195, 0.3); border: 2px solid var(--neon-cyan); display: flex; justify-content: center; align-items: center; font-weight: bold; font-size: 1rem; color: white; }
+#btn-boost { right: 20px; }
+#btn-jump { right: 120px; }
+.joystick-base { position: absolute; width: 120px; height: 120px; border-radius: 50%; background: rgba(255, 255, 255, 0.1); border: 2px solid rgba(255,255,255,0.3); display: none; }
+.joystick-nub { position: absolute; top: 50%; left: 50%; width: 50px; height: 50px; border-radius: 50%; background: rgba(255, 255, 255, 0.5); transform: translate(-50%, -50%); }
+#crosshair { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 20px; height: 20px; border: 2px solid rgba(180, 212, 85, 0.5); border-radius: 50%; z-index: 100; pointer-events: none; }
+
+/* DESKTOP / LANDSCAPE */
+@media (min-width: 768px), (orientation: landscape) {
+    .host-controls { bottom: 40px; left: 40px; }
+    .confirm-setup-btn { bottom: 40px; left: auto; right: 40px; width: 200px; transform: none; }
+    .confirm-setup-btn:active { transform: scale(0.95); }
+    .hub-container { top: 0; left: 0; width: 350px; height: 100vh; border-right: 1px solid var(--border-color); }
+    .tank-icon-card { width: 145px; }
+}
+
+/* MOBILE PORTRAIT */
+@media (max-width: 767px) and (orientation: portrait) {
+    .host-controls { left: 50%; transform: translateX(-50%); }
+    .hub-container { bottom: 0; left: 0; width: 100vw; height: 50vh; border-top: 1px solid var(--border-color); border-radius: 20px 20px 0 0; }
+    .tank-icon-card { width: 30%; min-width: 90px; }
+    .garage-content { padding-bottom: 30px; }
+}

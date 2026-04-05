@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Blow 'em Up Buddies</title>
+    <link rel="stylesheet" href="/style.css">
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+</head>
+<body>
+
+    <div id="ui-layer">
+
+        <div id="start-screen" class="screen interactive">
+            <div class="menu-card text-center">
+                <h1 class="game-title">BUDDIES</h1>
+
+                <div class="input-group">
+                    <label>CALLSIGN</label>
+                    <input type="text" id="input-name" placeholder="ENTER NAME" maxlength="12">
+                </div>
+
+                <button id="btn-host" class="primary-btn mt-20">HOST GAME</button>
+
+                <div class="divider"><span>OR</span></div>
+
+                <div class="input-group">
+                    <input type="text" id="input-code" placeholder="ROOM CODE" maxlength="4">
+                    <button id="btn-join" class="secondary-btn mt-10">JOIN ROOM</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="host-setup-screen" class="screen interactive hidden">
+            <button class="icon-btn back-btn" id="btn-cancel-host"><i class="ph ph-arrow-left"></i></button>
+
+            <div class="host-controls">
+                <button id="btn-confirm-host" class="circle-btn success-btn"><i class="ph ph-check"></i></button>
+                <div class="selector-card">
+                    <button id="btn-map-prev">&lt;</button>
+                    <span id="lbl-setup-map">Shattered City</span>
+                    <button id="btn-map-next">&gt;</button>
+                </div>
+                <div class="selector-card">
+                    <button id="btn-tank-prev">&lt;</button>
+                    <span id="lbl-setup-tanks">6 Tanks</span>
+                    <button id="btn-tank-next">&gt;</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="lobby-screen" class="hub-container interactive hidden">
+
+            <div id="view-roster" class="hub-view">
+                <div class="hub-header">
+                    <span id="lobby-code-display" class="room-code">ROOM: ----</span>
+                    <button class="text-btn" id="btn-open-garage"><i class="ph ph-wrench"></i> GARAGE</button>
+                </div>
+
+                <div class="roster-grid" id="roster-grid"></div>
+
+                <div class="action-footer">
+                    <button id="btn-ready" class="primary-btn">READY UP</button>
+                    <button id="btn-launch" class="success-btn hidden">LAUNCH MATCH</button>
+                </div>
+            </div>
+
+            <div id="view-garage" class="hub-view hidden">
+                <div class="hub-header">
+                    <button class="icon-btn" id="btn-close-garage"><i class="ph ph-arrow-left"></i></button>
+                    <h3 class="garage-title">WORKSHOP</h3>
+                </div>
+
+                <div class="garage-content">
+                    <div class="combined-picker">
+                        <label>TURRET & BARREL</label>
+                        <div class="picker-controls">
+                            <button id="btn-top-prev">&lt;</button>
+                            <span id="lbl-top-part">Assault Package</span>
+                            <button id="btn-top-next">&gt;</button>
+                        </div>
+                    </div>
+
+                    <div class="combined-picker">
+                        <label>CHASSIS & TREADS</label>
+                        <div class="picker-controls">
+                            <button id="btn-bottom-prev">&lt;</button>
+                            <span id="lbl-bottom-part">Heavy Tracker</span>
+                            <button id="btn-bottom-next">&gt;</button>
+                        </div>
+                    </div>
+
+                    <label class="mt-10">PAINT JOB</label>
+                    <div class="color-palette" id="color-palette">
+                        </div>
+                </div>
+            </div>
+        </div>
+
+        <button id="btn-switch-seat" class="interactive hidden">SWAP SEAT</button>
+        <div id="crosshair" class="hidden"></div>
+        <div id="joy-base" class="joystick-base hidden"><div id="joy-nub" class="joystick-nub"></div></div>
+        <div id="btn-boost" class="action-button interactive hidden">BOOST</div>
+        <div id="btn-jump" class="action-button interactive hidden">JUMP</div>
+
+    </div>
+
+    <script src="/environment.js"></script>
+    <script src="/maps.js"></script>
+    <script src="/tank-factory.js"></script>
+    <script src="/lobby.js"></script>
+    <script src="/app.js"></script>
+</body>
+</html>
