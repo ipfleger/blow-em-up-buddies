@@ -13,15 +13,12 @@ class Match {
         this.mode = mode || 'FFA';
         this.mapName = mapName || 'bowl';
 
-        // FIXED: Dynamically spawn exact tanks based on configs
         this.tanks = {};
         if (configs) {
             let i = 0;
             let totalTanks = Object.keys(configs).length;
             for (let tId in configs) {
                 let num = parseInt(tId.replace('tank', ''));
-
-                // If it's a team match, split them evenly. If FFA, everyone is their own team!
                 let team = (this.mode === '3v3') ? (num <= Math.ceil(totalTanks / 2) ? 1 : 2) : num;
                 let slotIndex = i % 3;
 
@@ -106,8 +103,8 @@ class Match {
             let barrelBaseY = t.position.y + 2.2 + t.actualTurretYOffset;
             let cameraY = t.position.y + 3.4 + t.actualTurretYOffset;
 
-            // --- FIRE THE CONCUSSIVE RAY ---
-            if (t.fireReady) {
+            // --- FIRE WEAPONS ---
+            if (t.fireConcussive || t.fireRapid) {
                 let absYaw = t.turretYaw; let absPitch = t.turretPitch;
                 let camDirX = -Math.sin(absYaw) * Math.cos(absPitch);
                 let camDirY = Math.sin(absPitch);
@@ -119,9 +116,17 @@ class Match {
 
                 let aimVecX = targetX - t.position.x; let aimVecY = targetY - barrelBaseY; let aimVecZ = targetZ - t.position.z;
                 let dist = Math.hypot(aimVecX, aimVecY, aimVecZ);
-
                 let dX = aimVecX / dist; let dY = aimVecY / dist; let dZ = aimVecZ / dist;
-                this.bullets.push({ owner: id, x: t.position.x + dX*4.5, y: barrelBaseY + dY*4.5, z: t.position.z + dZ*4.5, dx: dX, dy: dY, dz: dZ, life: 1.5 });
+
+                if (t.fireConcussive) {
+                    this.bullets.push({ type: 'concussive', owner: id, x: t.position.x + dX*4.5, y: barrelBaseY + dY*4.5, z: t.position.z + dZ*4.5, dx: dX, dy: dY, dz: dZ, speed: 180, life: 1.5 });
+                }
+                if (t.fireRapid) {
+                    let spreadX = (Math.random() - 0.5) * 0.04;
+                    let spreadY = (Math.random() - 0.5) * 0.04;
+                    let spreadZ = (Math.random() - 0.5) * 0.04;
+                    this.bullets.push({ type: 'rapid', owner: id, x: t.position.x + dX*4.5, y: barrelBaseY + dY*4.5, z: t.position.z + dZ*4.5, dx: dX + spreadX, dy: dY + spreadY, dz: dZ + spreadZ, speed: 300, life: 0.8 });
+                }
             }
         }
 
@@ -130,7 +135,7 @@ class Match {
             let b = this.bullets[i];
             let oldX = b.x, oldY = b.y, oldZ = b.z;
 
-            b.x += b.dx * 180 * delta; b.y += b.dy * 180 * delta; b.z += b.dz * 180 * delta;
+            b.x += b.dx * b.speed * delta; b.y += b.dy * b.speed * delta; b.z += b.dz * b.speed * delta;
             b.life -= delta;
 
             let hit = false;
@@ -146,8 +151,17 @@ class Match {
                 let cX = oldX + t * segDx, cZ = oldZ + t * segDz, cY = oldY + t * segDy;
 
                 if (Math.hypot(cX - target.position.x, cZ - target.position.z) < 3.0 && Math.abs(cY - target.position.y) < 3.0) {
-                    this.blastZones.push({ x: cX, y: cY, z: cZ, life: 1.2, owner: b.owner, hasPulsed: false });
-                    hit = true; break;
+                    hit = true;
+                    if (b.type === 'concussive') {
+                        this.blastZones.push({ x: cX, y: cY, z: cZ, life: 1.2, owner: b.owner, hasPulsed: false });
+                    } else if (b.type === 'rapid') {
+                        let isTeammate = (this.mode === '3v3' && this.getTeam(tId) === this.getTeam(b.owner));
+                        if (!isTeammate) {
+                            target.health -= 6;
+                            if (target.health <= 0) target.die();
+                        }
+                    }
+                    break;
                 }
             }
 
@@ -159,8 +173,12 @@ class Match {
                     let cX = oldX + t * segDx, cZ = oldZ + t * segDz, cY = oldY + t * segDy;
 
                     if (Math.hypot(cX - s.x, cZ - s.z) < s.r && Math.abs(cY - s.y) < 5) {
-                        s.health -= 50;
-                        this.blastZones.push({ x: cX, y: cY, z: cZ, life: 1.2, owner: b.owner, hasPulsed: false });
+                        if (b.type === 'concussive') {
+                            s.health -= 50;
+                            this.blastZones.push({ x: cX, y: cY, z: cZ, life: 1.2, owner: b.owner, hasPulsed: false });
+                        } else {
+                            s.health -= 6;
+                        }
                         hit = true; break;
                     }
                 }
@@ -169,7 +187,9 @@ class Match {
             if (!hit) {
                 let gY = getTerrainHeight(b.x, b.z, this.mapName);
                 if (b.y <= gY) {
-                    this.blastZones.push({ x: b.x, y: gY, z: b.z, life: 1.2, owner: b.owner, hasPulsed: false });
+                    if (b.type === 'concussive') {
+                        this.blastZones.push({ x: b.x, y: gY, z: b.z, life: 1.2, owner: b.owner, hasPulsed: false });
+                    }
                     hit = true;
                 }
             }

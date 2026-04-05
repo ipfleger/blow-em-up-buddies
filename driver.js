@@ -32,8 +32,7 @@ class ServerTank {
         this.surfaceNormal = new THREE.Vector3(0, 1, 0);
         this.flipAxis = new THREE.Vector3();
 
-        // NEW: Gunner holds a state of which ability is currently equipped
-        this.gunnerAbility = 'grapple';
+        this.gunnerAbility = 'rapid';
         this.driverInputs = { moveX: 0, moveY: 0, isBoosting: false, triggerJump: false };
         this.gunnerInputs = { aimYaw: 0, aimPitch: 0, isFiring: false, triggerSecondary: false, switchAbility: false };
 
@@ -47,7 +46,6 @@ class ServerTank {
         this.velocity.set(0, 0, 0);
         this.currentSpeed = 0;
         this.isFlipping = false;
-        this.isGrappling = false;
     }
 
     respawn() {
@@ -62,16 +60,11 @@ class ServerTank {
         this.boost = CONFIG.maxBoost;
         this.health = 100;
         this.isGrounded = false;
-        this.primaryHeat = 0;
         this.bombCooldown = 0;
-        this.isOverheated = false;
+        this.rapidCooldown = 0;
 	    this.jumpCooldown = 0;
         this.driverInputs.triggerJump = false;
-	    this.liftState = 'idle';
-        this.liftTimer = 0;
-        this.liftActiveOffset = 5.0; // Start elevated in-game!
-        this.actualTurretYOffset = 5.0;
-        this.isGrappling = false;
+        this.actualTurretYOffset = 12.0;
     }
 
     getTeam(tankId) {
@@ -88,77 +81,28 @@ class ServerTank {
 
         let mapProps = getMapProps(this.mapName) || { platforms: [], obstacles: [], updrafts: [], cube: null };
 
+        // --- WEAPON COOLDOWNS ---
         if (this.bombCooldown > 0) this.bombCooldown -= delta;
+        if (this.rapidCooldown > 0) this.rapidCooldown -= delta;
 
-        this.fireReady = false;
+        this.fireConcussive = false;
+        this.fireRapid = false;
+
+        // PRIMARY WEAPON: Massive Concussive Blast (Slow)
         if (this.gunnerInputs.isFiring && this.bombCooldown <= 0) {
-            this.bombCooldown = 2.0;
-            this.fireReady = true;
+            this.bombCooldown = 2.5; // Long cooldown
+            this.fireConcussive = true;
         }
 
-        // Handle ability swapping
-        if (this.gunnerInputs.switchAbility) {
-            this.gunnerAbility = this.gunnerAbility === 'grapple' ? 'lift' : 'grapple';
-            this.gunnerInputs.switchAbility = false;
-        }
-
-        // Trigger chosen ability
-        if (this.gunnerInputs.triggerSecondary) {
-            if (this.gunnerAbility === 'grapple' && mapProps.cube) {
-                let cubePos = new THREE.Vector3(mapProps.cube.x, mapProps.cube.y, mapProps.cube.z);
-                if (!this.isGrappling && this.position.distanceTo(cubePos) < 250) {
-                    this.isGrappling = true;
-                } else {
-                    this.isGrappling = false;
-                }
-            } else if (this.gunnerAbility === 'lift' && this.liftState === 'idle') {
-                this.liftState = 'rising';
-                this.liftTimer = 0.4;
-            }
-            this.gunnerInputs.triggerSecondary = false;
-        }
-
-        // Apply Grapple Pull Physics
-        if (this.isGrappling && mapProps.cube) {
-            let cubePos = new THREE.Vector3(mapProps.cube.x, mapProps.cube.y, mapProps.cube.z);
-            let pullVec = cubePos.clone().sub(this.position);
-            let dist = pullVec.length();
-
-            if (dist > 8 && dist < 300) {
-                pullVec.normalize();
-                let pullStrength = 3.8;
-                this.velocity.x += pullVec.x * pullStrength * delta;
-                this.velocity.y += pullVec.y * pullStrength * delta;
-                this.velocity.z += pullVec.z * pullStrength * delta;
-                this.velocity.y += 0.8 * delta; // Upward assist
-                this.isGrounded = false;
-            } else {
-                this.isGrappling = false;
-            }
+        // SECONDARY WEAPON: Rapid Fire Machine Gun
+        if (this.gunnerInputs.triggerSecondary && this.rapidCooldown <= 0) {
+            this.rapidCooldown = 0.12; // Extremely fast
+            this.fireRapid = true;
         }
 
         // --- DYNAMIC TURRET ELEVATION LOGIC ---
-        // Base hover is 5.0 so the gunner sees over the chassis
-        let activeElevation = 5.0;
-
-        if (this.isGrappling) {
-            activeElevation = 0.0; // Sink completely to the chassis
-        } else if (this.liftState === 'rising') {
-            this.liftActiveOffset += ((12.0 - 5.0) / 0.4) * delta;
-            activeElevation = this.liftActiveOffset;
-            this.liftTimer -= delta;
-            if (this.liftTimer <= 0) { this.liftState = 'hovering'; this.liftTimer = 2.5; this.liftActiveOffset = 12.0; }
-        } else if (this.liftState === 'hovering') {
-            this.liftTimer -= delta;
-            activeElevation = 12.0; // Max launch height
-            if (this.liftTimer <= 0) this.liftState = 'descending';
-        } else if (this.liftState === 'descending') {
-            this.liftActiveOffset -= ((12.0 - 5.0) / 3.0) * delta;
-            activeElevation = Math.max(5.0, this.liftActiveOffset);
-            if (this.liftActiveOffset <= 5.0) { this.liftActiveOffset = 5.0; this.liftState = 'idle'; }
-        } else {
-            this.liftActiveOffset = 5.0;
-        }
+        // LIFTED BY DEFAULT: Permanently set elevation to 12.0 (max height)
+        let activeElevation = 12.0;
 
         // Tether physics to ceilings
         let ceilingY = 1000;
@@ -199,10 +143,19 @@ class ServerTank {
                 this.gunnerInputs.aimPitch += (targetPitch - this.gunnerInputs.aimPitch) * 4 * delta;
 
                 if (Math.abs(diffYaw) < 0.2 && Math.abs(targetPitch - this.gunnerInputs.aimPitch) < 0.2) {
-                    this.gunnerInputs.isFiring = true;
-                    if (this.bombCooldown <= 0 && minDist > 30) this.gunnerInputs.triggerSecondary = true;
-                } else this.gunnerInputs.isFiring = false;
-            } else this.gunnerInputs.isFiring = false;
+                    if (this.bombCooldown <= 0) this.gunnerInputs.isFiring = true;
+                    else this.gunnerInputs.isFiring = false;
+
+                    if (this.rapidCooldown <= 0) this.gunnerInputs.triggerSecondary = true;
+                    else this.gunnerInputs.triggerSecondary = false;
+                } else {
+                    this.gunnerInputs.isFiring = false;
+                    this.gunnerInputs.triggerSecondary = false;
+                }
+            } else {
+                this.gunnerInputs.isFiring = false;
+                this.gunnerInputs.triggerSecondary = false;
+            }
         }
 
         this.turretYaw = this.gunnerInputs.aimYaw;
@@ -419,7 +372,6 @@ class ServerTank {
 	        turretYOffset: trunc2(this.actualTurretYOffset), boost: Math.floor(this.boost), health: trunc1(this.health),
             bombCooldown: trunc1(this.bombCooldown), isDead: this.isDead,
             isBoosting: this.isEffectivelyBoosting && Math.abs(this.driverInputs.moveY) > 0.1,
-            isGrappling: this.isGrappling || false,
             gunnerAbility: this.gunnerAbility,
             speed: trunc1(this.currentSpeed), config: this.config
         };

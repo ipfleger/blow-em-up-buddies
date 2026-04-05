@@ -1,8 +1,5 @@
 // public/network.js
 window.Network = {
-    pc: null,
-    dataChannel: null,
-
     init: function() {
         this.setupSocketListeners();
         this.startInputSync();
@@ -24,16 +21,12 @@ window.Network = {
 
         window.socket.on('launch-game', (mapName) => {
             if (window.onLaunchGame) window.onLaunchGame(mapName);
-            window.socket.emit('start-webrtc');
-            this.initWebRTC();
+            // Notice: We no longer initialize WebRTC here!
         });
 
-        window.socket.on('webrtc-answer', (answer) => {
-            if (this.pc) this.pc.setRemoteDescription(new RTCSessionDescription(answer));
-        });
-
-        window.socket.on('ice-candidate', (data) => {
-            if (this.pc) this.pc.addIceCandidate(new RTCIceCandidate(data));
+        // NEW: Receive the game state directly from Socket.io
+        window.socket.on('state', (state) => {
+            if (window.updateGame) window.updateGame(state);
         });
 
         window.socket.on('receive-ping', (data) => {
@@ -41,34 +34,17 @@ window.Network = {
         });
     },
 
-    initWebRTC: function() {
-        this.pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
-        this.dataChannel = this.pc.createDataChannel("game");
-
-        this.dataChannel.onmessage = (e) => {
-            const data = JSON.parse(e.data);
-            if (data.type === 'state' && window.updateGame) window.updateGame(data.payload);
-        };
-
-        this.pc.onicecandidate = (e) => {
-            if(e.candidate) window.socket.emit('ice-candidate', { candidate: e.candidate.candidate, sdpMid: e.candidate.sdpMid });
-        };
-
-        this.pc.createOffer()
-            .then(o => this.pc.setLocalDescription(o))
-            .then(() => window.socket.emit('webrtc-offer', { type: this.pc.localDescription.type, sdp: this.pc.localDescription.sdp }));
-    },
-
     startInputSync: function() {
         setInterval(() => {
-            if(this.dataChannel && this.dataChannel.readyState === 'open' && window.Controls) {
-                this.dataChannel.send(JSON.stringify({ type: 'input', payload: window.Controls.input }));
+            if (window.Controls && window.isMatchActive) {
+                // Send inputs directly via socket
+                window.socket.emit('input', window.Controls.input);
+
+                // Clear triggers so they don't fire continuously
                 window.Controls.input.triggerJump = false;
                 window.Controls.input.triggerSecondary = false;
-                if(window.Controls.touchBtns.jump) window.Controls.touchBtns.jump = false;
+                window.Controls.input.switchAbility = false;
             }
-        }, 1000/30);
+        }, 1000 / 30); // 30 times a second
     }
 };
-
-setTimeout(() => window.Network.init(), 100);

@@ -6,6 +6,16 @@ window.Controls = {
     keys: {}, touchBtns: { boost: false, jump: false, swap: false },
     specCam: { x: 0, y: 80, z: 0, yaw: 0, pitch: -Math.PI/4 },
 
+    // --- AR SENSOR VARIABLES ---
+    useAR: false,
+    arInitDone: false,
+    lastAlpha: null,
+    baseRawPitch: null,
+    latestRawPitch: 0,
+    gravityX: 0, gravityY: 0, gravityZ: 0,
+    smoothedLift: 0, poleDampener: 1,
+    manualPitchOffset: 0,
+
     touchId: null, startXY: { x: 0, y: 0 },
     lastTapTime: 0, lastTapXY: { x: 0, y: 0 }, lockedTargetId: null,
     lobbyDragActive: false, lobbyDragStartX: 0, manualLobbyRot: 0,
@@ -18,6 +28,70 @@ window.Controls = {
         this.setupActionButtons();
         this.setupTouchControls();
         this.setupDesktopLobbyControls();
+    },
+
+    // --- AR SENSOR LOGIC ---
+    getShortestAngle: function(current, previous) {
+        let diff = current - previous;
+        while (diff < -180) diff += 360;
+        while (diff > 180) diff -= 360;
+        return diff;
+    },
+
+    getMappedLift: function(e) {
+        let angle = window.orientation || 0;
+        if (angle === 90) return e.acceleration.x || 0;
+        if (angle === -90) return -(e.acceleration.x || 0);
+        return e.acceleration.y || 0;
+    },
+
+    setupMotionControls: function() {
+        if (this.arInitDone) return;
+        this.arInitDone = true;
+
+        window.addEventListener('deviceorientation', (e) => {
+            if (!this.useAR || window.myCurrentRole !== 'gunner' || !window.isMatchActive) return;
+
+            if (this.lastAlpha === null) { this.lastAlpha = e.alpha; return; }
+            let deltaAlpha = this.getShortestAngle(e.alpha, this.lastAlpha);
+
+            if (Math.abs(deltaAlpha) < 90) {
+                let deltaRad = deltaAlpha * (Math.PI / 180);
+                this.localAim.yaw += (deltaRad * 3.0 * this.poleDampener);
+            }
+            this.lastAlpha = e.alpha;
+        });
+
+        window.addEventListener('devicemotion', (e) => {
+            if (!this.useAR || window.myCurrentRole !== 'gunner' || !window.isMatchActive) return;
+
+            let ag = e.accelerationIncludingGravity;
+            if (ag) {
+                this.gravityX = (this.gravityX * 0.8) + ((ag.x || 0) * 0.2);
+                this.gravityY = (this.gravityY * 0.8) + ((ag.y || 0) * 0.2);
+                this.gravityZ = (this.gravityZ * 0.8) + ((ag.z || 0) * 0.2);
+
+                let angle = window.orientation || 0;
+                if (angle === 90) this.latestRawPitch = Math.atan2(this.gravityZ, -this.gravityX) * (180 / Math.PI);
+                else if (angle === -90) this.latestRawPitch = Math.atan2(this.gravityZ, this.gravityX) * (180 / Math.PI);
+                else this.latestRawPitch = Math.atan2(this.gravityZ, -this.gravityY) * (180 / Math.PI);
+
+                if (this.baseRawPitch === null) this.baseRawPitch = this.latestRawPitch;
+
+                let wristPitch = this.getShortestAngle(this.latestRawPitch, this.baseRawPitch);
+                let angleFromFlat = Math.abs(90 - Math.abs(this.latestRawPitch));
+                this.poleDampener = Math.min(1, angleFromFlat / 30);
+
+                let rawLiftForce = this.getMappedLift(e);
+                this.smoothedLift = (this.smoothedLift * 0.85) + (rawLiftForce * 0.15);
+
+                let hybridPitchDeg = (wristPitch * 1.2) + (this.smoothedLift * 15.0);
+                let pitchRad = hybridPitchDeg * (Math.PI / 180) + this.manualPitchOffset;
+
+                pitchRad = Math.max(-Math.PI/2.05, Math.min(Math.PI/2.05, pitchRad));
+                this.localAim.pitch = pitchRad;
+            }
+        });
     },
 
     raycastFromScreen: function(screenX, screenY) {
@@ -82,8 +156,14 @@ window.Controls = {
                     this.joyNub.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
 
                     if (window.myCurrentRole === 'driver') { this.input.moveX = dx / 40; this.input.moveY = dy / 40; }
-                    else if (window.myCurrentRole === 'gunner') { this.aimJoystick.x = dx / 40; this.aimJoystick.y = dy / 40; }
+                    else if (window.myCurrentRole === 'gunner' && !this.useAR) { this.aimJoystick.x = dx / 40; this.aimJoystick.y = dy / 40; }
                     else if (window.myCurrentRole === 'spectator') { this.input.moveX = dx / 40; this.input.moveY = dy / 40; }
+                } else if (window.myCurrentRole === 'gunner' && this.useAR) {
+                    // Intercept right-side swipes to offset the AR sensor natively
+                    let dx = t.clientX - this.lastTapXY.x; let dy = t.clientY - this.lastTapXY.y;
+                    this.localAim.yaw -= dx * 0.005;
+                    this.manualPitchOffset -= dy * 0.005;
+                    this.lastTapXY = { x: t.clientX, y: t.clientY };
                 }
             }
         }, {passive: false});
@@ -152,11 +232,11 @@ window.Controls = {
             if (this.keys['ArrowUp']) this.aimJoystick.y = -1; else if (this.keys['ArrowDown']) this.aimJoystick.y = 1; else if (!this.touchId && window.myCurrentRole!=='spectator') this.aimJoystick.y = 0;
             if (this.keys['ArrowLeft']) this.aimJoystick.x = -1; else if (this.keys['ArrowRight']) this.aimJoystick.x = 1; else if (!this.touchId && window.myCurrentRole!=='spectator') this.aimJoystick.x = 0;
 
+            // Primary Weapon (Concussive Blast)
             this.input.isFiring = this.touchBtns.boost || this.keys['Space'];
 
-            if (this.touchBtns.jump || this.keys['ShiftLeft'] || this.keys['ShiftRight']) {
-                this.input.triggerSecondary = true; this.keys['ShiftLeft'] = false; this.keys['ShiftRight'] = false; this.touchBtns.jump = false;
-            }
+            // Secondary Weapon (Rapid Fire) - Allows holding the button down
+            this.input.triggerSecondary = Boolean(this.touchBtns.jump || this.keys['ShiftLeft'] || this.keys['ShiftRight']);
 
             if (this.keys['KeyE']) {
                 this.input.switchAbility = true; this.keys['KeyE'] = false;

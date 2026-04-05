@@ -2,13 +2,11 @@
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
-const nodeDataChannel = require('node-datachannel');
 const gameEngine = require('./game-engine');
 const maps = require('./maps');
 const fs = require('fs');
 const path = require('path');
 
-nodeDataChannel.initLogger("Fatal");
 
 const app = express();
 const server = http.createServer(app);
@@ -253,23 +251,11 @@ io.on('connection', (socket) => {
         if(match && match.playerMapping[socket.id]) match.swapSeats(match.playerMapping[socket.id].tankId);
     });
 
-    socket.on('start-webrtc', () => {
-        if (!currentRoom) return;
-        let pc = new nodeDataChannel.PeerConnection(socket.id, { iceServers: ["stun:stun.l.google.com:19302"] });
-        socket.pc = pc;
-        pc.onLocalDescription((sdp, type) => socket.emit('webrtc-answer', { sdp, type }));
-        pc.onLocalCandidate((candidate, mid) => socket.emit('ice-candidate', { candidate, sdpMid: mid }));
-        pc.onDataChannel((dc) => {
-            activeRooms.get(currentRoom).set(socket.id, dc);
-            dc.onMessage((msg) => {
-                let data = JSON.parse(msg);
-                if (data.type === 'input') gameEngine.getMatch(currentRoom).applyInput(socket.id, data.payload);
-            });
-        });
-    });
 
-    socket.on('webrtc-offer', (offer) => { if(socket.pc) socket.pc.setRemoteDescription(offer.sdp, offer.type); });
-    socket.on('ice-candidate', (data) => { if(socket.pc) socket.pc.addRemoteCandidate(data.candidate, data.sdpMid); });
+        socket.on('input', (input) => {
+            let match = gameEngine.getMatch(currentRoom);
+            if (match) match.applyInput(socket.id, input);
+        });
 
     socket.on('disconnect', () => {
         if (currentRoom) {
@@ -305,9 +291,9 @@ setInterval(() => {
     const matches = gameEngine.getAllMatches();
     for (let id in matches) {
         let state = matches[id].tick(delta);
-        let stateStr = JSON.stringify({ type: 'state', payload: state });
-        let channels = activeRooms.get(id);
-        if (channels) channels.forEach(dc => { if (dc.isOpen()) dc.sendMessage(stateStr); });
+
+        // Broadcast the state directly to everyone in this room's lobby via Socket.io
+        io.to(id).emit('state', state);
     }
 }, 1000 / 30);
 
