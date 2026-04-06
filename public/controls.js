@@ -6,7 +6,6 @@ window.Controls = {
     keys: {}, touchBtns: { boost: false, jump: false, swap: false },
     specCam: { x: 0, y: 80, z: 0, yaw: 0, pitch: -Math.PI/4 },
 
-    // --- AR SENSOR VARIABLES ---
     useAR: false,
     arInitDone: false,
     lastAlpha: null,
@@ -30,7 +29,6 @@ window.Controls = {
         this.setupDesktopLobbyControls();
     },
 
-    // --- AR SENSOR LOGIC ---
     getShortestAngle: function(current, previous) {
         let diff = current - previous;
         while (diff < -180) diff += 360;
@@ -159,7 +157,6 @@ window.Controls = {
                     else if (window.myCurrentRole === 'gunner' && !this.useAR) { this.aimJoystick.x = dx / 40; this.aimJoystick.y = dy / 40; }
                     else if (window.myCurrentRole === 'spectator') { this.input.moveX = dx / 40; this.input.moveY = dy / 40; }
                 } else if (window.myCurrentRole === 'gunner' && this.useAR) {
-                    // Intercept right-side swipes to offset the AR sensor natively
                     let dx = t.clientX - this.lastTapXY.x; let dy = t.clientY - this.lastTapXY.y;
                     this.localAim.yaw -= dx * 0.005;
                     this.manualPitchOffset -= dy * 0.005;
@@ -232,10 +229,9 @@ window.Controls = {
             if (this.keys['ArrowUp']) this.aimJoystick.y = -1; else if (this.keys['ArrowDown']) this.aimJoystick.y = 1; else if (!this.touchId && window.myCurrentRole!=='spectator') this.aimJoystick.y = 0;
             if (this.keys['ArrowLeft']) this.aimJoystick.x = -1; else if (this.keys['ArrowRight']) this.aimJoystick.x = 1; else if (!this.touchId && window.myCurrentRole!=='spectator') this.aimJoystick.x = 0;
 
-            // Primary Weapon (Concussive Blast)
             this.input.isFiring = this.touchBtns.boost || this.keys['Space'];
 
-            // Secondary Weapon (Rapid Fire) - Allows holding the button down
+            // Allow holding down the secondary action
             this.input.triggerSecondary = Boolean(this.touchBtns.jump || this.keys['ShiftLeft'] || this.keys['ShiftRight']);
 
             if (this.keys['KeyE']) {

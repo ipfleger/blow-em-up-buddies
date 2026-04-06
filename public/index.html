@@ -7,14 +7,6 @@
     <link rel="stylesheet" href="/style.css">
 
     <style>
-
-    .action-footer {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: 10px;
-    width: 100%;
-    }
         /* Mobile UI Layout & Halo HUD Overrides */
         #btn-boost {
             position: absolute !important;
@@ -46,7 +38,7 @@
             height: 45px !important;
             border-radius: 50% !important;
             font-size: 0.6rem !important;
-            background: rgba(212, 74, 142, 0.8) !important; /* Pink accent */
+            background: rgba(212, 74, 142, 0.8) !important;
             border: 2px solid #fff !important;
             color: #fff !important;
             z-index: 100;
@@ -71,7 +63,7 @@
             top: 20px !important;
             left: 20px !important;
             right: auto !important;
-            border-radius: 12px !important; /* Tactical square instead of a circle */
+            border-radius: 12px !important;
             border: 2px solid rgba(109, 203, 195, 0.5) !important;
             box-shadow: 0 0 15px rgba(109, 203, 195, 0.2);
         }
@@ -102,12 +94,16 @@
         <div id="start-screen" class="screen interactive">
             <div class="menu-card text-center">
                 <h1 class="game-title">BUDDIES</h1>
+
                 <div class="input-group">
                     <label>CALLSIGN</label>
                     <input type="text" id="input-name" placeholder="ENTER NAME" maxlength="12">
                 </div>
+
                 <button id="btn-host" class="primary-btn mt-20">HOST GAME</button>
+
                 <div class="divider"><span>OR</span></div>
+
                 <div class="input-group">
                     <input type="text" id="input-code" placeholder="ROOM CODE" maxlength="4">
                     <button id="btn-join" class="secondary-btn mt-10">JOIN ROOM</button>
@@ -145,7 +141,9 @@
                     <button class="text-btn" id="btn-open-garage" style="font-weight:bold; color:var(--neon-green);">CUSTOMIZE <i class="ph ph-arrow-right"></i></button>
                 </div>
                 <div class="roster-grid" id="roster-grid"></div>
+
                 <div class="action-footer">
+                    <button id="btn-enable-ar" class="secondary-btn" style="display: none;">AR AIM</button>
                     <button id="btn-ready" class="primary-btn">READY UP</button>
                     <button id="btn-launch" class="success-btn hidden">LAUNCH MATCH</button>
                 </div>
@@ -174,7 +172,8 @@
                         </div>
                     </div>
                     <label class="mt-10">PAINT JOB</label>
-                    <div class="color-palette" id="color-palette"></div>
+                    <div class="color-palette" id="color-palette-bot"></div>
+                    <div class="color-palette" id="color-palette-top"></div>
                 </div>
             </div>
         </div>

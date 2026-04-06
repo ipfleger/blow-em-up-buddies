@@ -21,10 +21,9 @@ window.Network = {
 
         window.socket.on('launch-game', (mapName) => {
             if (window.onLaunchGame) window.onLaunchGame(mapName);
-            // Notice: We no longer initialize WebRTC here!
         });
 
-        // NEW: Receive the game state directly from Socket.io
+        // Receive the game state directly from Socket.io
         window.socket.on('state', (state) => {
             if (window.updateGame) window.updateGame(state);
         });
@@ -37,14 +36,14 @@ window.Network = {
     startInputSync: function() {
         setInterval(() => {
             if (window.Controls && window.isMatchActive) {
-                // Send inputs directly via socket
                 window.socket.emit('input', window.Controls.input);
 
-                // Clear triggers so they don't fire continuously
                 window.Controls.input.triggerJump = false;
                 window.Controls.input.triggerSecondary = false;
                 window.Controls.input.switchAbility = false;
             }
-        }, 1000 / 30); // 30 times a second
+        }, 1000 / 30);
     }
 };
+
+setTimeout(() => window.Network.init(), 100);

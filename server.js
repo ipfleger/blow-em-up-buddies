@@ -7,7 +7,6 @@ const maps = require('./maps');
 const fs = require('fs');
 const path = require('path');
 
-
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: "*" } });
@@ -32,7 +31,6 @@ function getRandomIcons(count) {
     return shuffled.slice(0, count);
 }
 
-// FIXED: Dynamically assign beautiful colors depending on the Match Mode
 const PALETTE = ['#b4d455', '#ff3366', '#6dcbc3', '#ffd700', '#ff8c00', '#d44a8e'];
 
 function applyDefaultColors(lobby) {
@@ -47,7 +45,6 @@ function applyDefaultColors(lobby) {
             conf.c1 = (i <= Math.ceil(count / 2)) ? '#b4d455' : '#ff3366';
             conf.c2 = '#222222';
         } else {
-            // FFA Mode: Give everyone a distinct primary color and a secondary offset
             conf.c1 = PALETTE[(i - 1) % PALETTE.length];
             conf.c2 = PALETTE[(i) % PALETTE.length];
         }
@@ -150,7 +147,6 @@ io.on('connection', (socket) => {
         broadcastLobby(currentRoom);
     });
 
-    // FIXED: The missing event listener!
     socket.on('change-tank-count', (newCount) => {
         if (!currentRoom || !activeLobbies[currentRoom] || activeLobbies[currentRoom].host !== socket.id) return;
         let lobby = activeLobbies[currentRoom];
@@ -192,8 +188,6 @@ io.on('connection', (socket) => {
         let conf = activeLobbies[currentRoom].tankConfigs[tankId];
         if (role === 'driver') { conf.chassis = state.chassis; conf.treads = state.treads; conf.c1 = state.c1; }
         else { conf.turret = state.turret; conf.barrel = state.barrel; conf.c2 = state.c2; }
-
-        // FIXED: Re-broadcast to EVERYONE (including the sender) so the UI updates globally immediately.
         broadcastLobby(currentRoom);
     });
 
@@ -251,11 +245,11 @@ io.on('connection', (socket) => {
         if(match && match.playerMapping[socket.id]) match.swapSeats(match.playerMapping[socket.id].tankId);
     });
 
-
-        socket.on('input', (input) => {
-            let match = gameEngine.getMatch(currentRoom);
-            if (match) match.applyInput(socket.id, input);
-        });
+    // Handle WebSocket Inputs Instead of WebRTC
+    socket.on('input', (input) => {
+        let match = gameEngine.getMatch(currentRoom);
+        if (match) match.applyInput(socket.id, input);
+    });
 
     socket.on('disconnect', () => {
         if (currentRoom) {
@@ -278,7 +272,6 @@ io.on('connection', (socket) => {
                 }
             }
         }
-        if (socket.pc) socket.pc.close();
     });
 });
 
@@ -292,7 +285,7 @@ setInterval(() => {
     for (let id in matches) {
         let state = matches[id].tick(delta);
 
-        // Broadcast the state directly to everyone in this room's lobby via Socket.io
+        // Broadcast the state directly to everyone in this room via WebSockets
         io.to(id).emit('state', state);
     }
 }, 1000 / 30);

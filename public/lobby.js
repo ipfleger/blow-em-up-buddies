@@ -15,6 +15,44 @@ function getValidName() {
     return name;
 }
 
+// --- AR PERMISSION HANDLING ---
+document.addEventListener('DOMContentLoaded', () => {
+    const btnAr = document.getElementById('btn-enable-ar');
+
+    if (btnAr && window.DeviceOrientationEvent && /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
+        btnAr.style.display = 'block';
+    }
+
+    if (btnAr) {
+        btnAr.onclick = async () => {
+            if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+                try {
+                    const permission = await DeviceOrientationEvent.requestPermission();
+                    if (permission === 'granted') {
+                        enableARUI(btnAr);
+                    } else {
+                        alert("Permission denied. AR Aiming requires sensor access.");
+                    }
+                } catch (err) {
+                    alert("HTTPS required for AR sensors.");
+                }
+            } else {
+                enableARUI(btnAr);
+            }
+        };
+    }
+
+    function enableARUI(btn) {
+        btn.innerText = 'AR ENABLED';
+        btn.style.borderColor = 'var(--neon-green)';
+        btn.style.color = 'var(--neon-green)';
+        window.Controls.useAR = true;
+        if (window.Controls.setupMotionControls) {
+            window.Controls.setupMotionControls();
+        }
+    }
+});
+
 // --- STATE 1: START SCREEN ---
 document.getElementById('btn-host').onclick = () => {
     let name = getValidName();
@@ -35,7 +73,6 @@ document.getElementById('btn-join').onclick = () => {
 };
 
 // --- STATE 2: HOST SETUP ---
-// FIXED: Added Stress Test to the top of the list!
 const MAP_OPTIONS = [
     { id: 'stress_test', name: 'Stress Test' },
     { id: 'shattered_city', name: 'Shattered City' },
@@ -202,7 +239,7 @@ window.socket.on('lobby-update', (lobby) => {
 
     const readyBtn = document.getElementById('btn-ready');
     if (lobby.ready[window.myId]) {
-        readyBtn.innerText = 'READY ✅'; readyBtn.style.background = '#6dcbc3'; readyBtn.style.color = '#1f1c30';
+        readyBtn.innerText = 'READY'; readyBtn.style.background = '#6dcbc3'; readyBtn.style.color = '#1f1c30';
     } else {
         readyBtn.innerText = 'READY UP'; readyBtn.style.background = '#b4d455'; readyBtn.style.color = '#1f1c30';
     }
@@ -210,11 +247,11 @@ window.socket.on('lobby-update', (lobby) => {
     const launchBtn = document.getElementById('btn-launch');
     if (window.isHost) {
         if (allReady && assignedCount > 0) {
-            launchBtn.innerText = 'LAUNCH MATCH 🚀';
+            launchBtn.innerText = 'LAUNCH MATCH';
             launchBtn.style.background = '#d44a8e';
             launchBtn.onclick = () => window.socket.emit('start-match');
         } else {
-            launchBtn.innerText = 'NUDGE UNREADY ⚠️';
+            launchBtn.innerText = 'NUDGE UNREADY';
             launchBtn.style.background = '#ff8c00';
             launchBtn.onclick = () => window.socket.emit('nudge-unready');
         }
