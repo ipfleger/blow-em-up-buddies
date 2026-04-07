@@ -6,7 +6,7 @@ const trunc1 = (val) => Math.round(val * 10) / 10;
 const trunc2 = (val) => Math.round(val * 100) / 100;
 const trunc3 = (val) => Math.round(val * 1000) / 1000;
 
-const CONFIG = { maxBoost: 100, gravity: -0.06, jumpForce: 1.4, dodgeForce: 1.2 };
+const CONFIG = { maxBoost: 100, gravity: -0.12, jumpForce: 2.0, dodgeForce: 2.5 };
 
 const MONOLITHS = [
     { x: 80, z: 80, r: 8, h: 80 }, { x: -80, z: 80, r: 8, h: 80 },
@@ -33,7 +33,7 @@ class ServerTank {
         this.flipAxis = new THREE.Vector3();
 
         this.gunnerAbility = 'rapid';
-        this.driverInputs = { moveX: 0, moveY: 0, isBoosting: false, triggerJump: false };
+        this.driverInputs = { moveX: 0, moveY: 0, isBoosting: false, triggerJump: false, holdingJump: false };
         this.gunnerInputs = { aimYaw: 0, aimPitch: 0, isFiring: false, triggerSecondary: false, switchAbility: false };
 
         this.respawn();
@@ -63,7 +63,10 @@ class ServerTank {
         this.bombCooldown = 0;
         this.rapidCooldown = 0;
 	    this.jumpCooldown = 0;
+        this.dodgeInvulnTimer = 0;
         this.driverInputs.triggerJump = false;
+        this.driverInputs.holdingJump = false;
+        this.wasBoostingLastTick = false;
         this.actualTurretYOffset = 12.0;
     }
 
@@ -84,6 +87,7 @@ class ServerTank {
         // --- WEAPON COOLDOWNS ---
         if (this.bombCooldown > 0) this.bombCooldown -= delta;
         if (this.rapidCooldown > 0) this.rapidCooldown -= delta;
+        if (this.dodgeInvulnTimer > 0) this.dodgeInvulnTimer -= delta;
 
         this.fireConcussive = false;
         this.fireRapid = false;
@@ -225,6 +229,13 @@ class ServerTank {
         else if (this.boostLingerTimer > 0) this.boostLingerTimer -= delta;
         this.isEffectivelyBoosting = (this.driverInputs.isBoosting || this.boostLingerTimer > 0);
 
+        // --- BOOST IMPULSE KICK ---
+        let justStartedBoosting = this.driverInputs.isBoosting && !this.wasBoostingLastTick;
+        if (justStartedBoosting && Math.abs(this.driverInputs.moveY) > 0.1 && this.boost > 0) {
+            this.currentSpeed += 15 * Math.sign(-this.driverInputs.moveY);
+        }
+        this.wasBoostingLastTick = this.driverInputs.isBoosting;
+
         let targetSpeed = 0;
         if (Math.abs(this.driverInputs.moveY) > 0.1) {
             let straightBonus = (Math.abs(this.driverInputs.moveX) < 0.05) ? 1.15 : 1.0;
@@ -237,19 +248,29 @@ class ServerTank {
         let accelRate = this.isEffectivelyBoosting ? 8 : 4;
         this.currentSpeed += (targetSpeed - this.currentSpeed) * accelRate * delta;
 
+        // --- VARIABLE JUMP HEIGHT ---
+        if (!this.isGrounded && !this.driverInputs.holdingJump && this.velocity.y > 0 && this._wasHoldingJump) {
+            this.velocity.y *= 0.5;
+        }
+        this._wasHoldingJump = this.driverInputs.holdingJump;
+
         if (this.driverInputs.triggerJump && this.jumpCooldown <= 0) {
             if (this.isGrounded) {
                 this.velocity.y = CONFIG.jumpForce; this.isGrounded = false;
                 this.canDoubleJump = true; this.jumpCooldown = 0.15;
+                this._wasHoldingJump = true;
             } else if (this.canDoubleJump) {
                 this.canDoubleJump = false; this.jumpCooldown = 0.5;
                 let mag = Math.hypot(this.driverInputs.moveX, this.driverInputs.moveY);
                 if (mag > 0.2) {
                     const normX = this.driverInputs.moveX / mag; const normY = this.driverInputs.moveY / mag;
                     const forwardPropulsion = -normY * 1.75; const sidePropulsion = -normX;
+                    // Cancel existing vertical velocity before dodge
+                    this.velocity.y = 0;
                     this.velocity.x += (dirX * forwardPropulsion + rightX * sidePropulsion) * CONFIG.dodgeForce;
                     this.velocity.z += (dirZ * forwardPropulsion + rightZ * sidePropulsion) * CONFIG.dodgeForce;
                     this.isFlipping = true; this.flipAngle = 0; this.flipAxis.set(normY, 0, -normX).normalize();
+                    this.dodgeInvulnTimer = 0.15;
                 } else this.velocity.y += CONFIG.jumpForce * 0.8;
             }
             this.driverInputs.triggerJump = false;
@@ -258,7 +279,7 @@ class ServerTank {
         const forward = new THREE.Vector3(0, 0, -1).applyAxisAngle(new THREE.Vector3(0, 1, 0), this.hullRotation);
         if (this.isGrounded) {
             forward.projectOnPlane(this.surfaceNormal).normalize();
-            this.lastClimbRate = (forward.y * this.currentSpeed) / 60;
+            this.lastClimbRate = forward.y * this.currentSpeed;
         }
 
         if (Math.abs(this.currentSpeed) > 0.1) this.position.add(forward.multiplyScalar(this.currentSpeed * delta));
@@ -344,7 +365,7 @@ class ServerTank {
             this.position.y = newGroundY; this.velocity.y = 0; this.isGrounded = true; this.canDoubleJump = false; this.isFlipping = false;
         } else this.isGrounded = false;
 
-        if (wasGrounded && !this.isGrounded && this.lastClimbRate > 0) this.velocity.y = this.lastClimbRate * 1.25;
+        if (wasGrounded && !this.isGrounded && this.lastClimbRate > 0) this.velocity.y = this.lastClimbRate * 1.8;
         if (this.position.y > ceilingY) { this.position.y = ceilingY; if (this.velocity.y > 0) this.velocity.y = -0.5; }
 
         const tiltQuat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), this.surfaceNormal);

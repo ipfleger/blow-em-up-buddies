@@ -1,6 +1,6 @@
 // public/controls.js
 window.Controls = {
-    input: { moveX: 0, moveY: 0, aimYaw: 0, aimPitch: 0, isBoosting: false, triggerJump: false, isFiring: false, triggerSecondary: false, switchAbility: false },
+    input: { moveX: 0, moveY: 0, aimYaw: 0, aimPitch: 0, isBoosting: false, triggerJump: false, holdingJump: false, isFiring: false, triggerSecondary: false, switchAbility: false },
     localAim: { yaw: 0, pitch: 0 },
     aimJoystick: { x: 0, y: 0 },
     keys: {}, touchBtns: { boost: false, jump: false, swap: false },
@@ -83,7 +83,7 @@ window.Controls = {
                 let rawLiftForce = this.getMappedLift(e);
                 this.smoothedLift = (this.smoothedLift * 0.85) + (rawLiftForce * 0.15);
 
-                let hybridPitchDeg = (wristPitch * 1.2) + (this.smoothedLift * 15.0);
+                let hybridPitchDeg = (wristPitch * 1.2) + (this.smoothedLift * 5.0);
                 let pitchRad = hybridPitchDeg * (Math.PI / 180) + this.manualPitchOffset;
 
                 pitchRad = Math.max(-Math.PI/2.05, Math.min(Math.PI/2.05, pitchRad));
@@ -108,7 +108,17 @@ window.Controls = {
 
             for(let t of e.changedTouches) {
                 const target = document.elementFromPoint(t.clientX, t.clientY);
-                if(target && (target.classList.contains('action-button') || target.id === 'btn-switch-seat' || target.id === 'btn-ability-swap')) continue;
+                if(target && (target.classList.contains('action-button') || target.id === 'btn-switch-seat')) continue;
+
+                // Double-tap right side: recalibrate AR pitch
+                if (this.useAR && t.clientX > window.innerWidth * 0.6) {
+                    let now = Date.now();
+                    if (now - this.lastTapTime < 300) {
+                        this.baseRawPitch = this.latestRawPitch;
+                        this.lastTapTime = 0; continue;
+                    }
+                    this.lastTapTime = now;
+                }
 
                 let now = Date.now();
                 let distFromLastTap = Math.hypot(t.clientX - this.lastTapXY.x, t.clientY - this.lastTapXY.y);
@@ -154,7 +164,10 @@ window.Controls = {
                     this.joyNub.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
 
                     if (window.myCurrentRole === 'driver') { this.input.moveX = dx / 40; this.input.moveY = dy / 40; }
-                    else if (window.myCurrentRole === 'gunner' && !this.useAR) { this.aimJoystick.x = dx / 40; this.aimJoystick.y = dy / 40; }
+                    else if (window.myCurrentRole === 'gunner') {
+                        // Joystick always available for aiming (supplementary when AR enabled)
+                        this.aimJoystick.x = dx / 40; this.aimJoystick.y = dy / 40;
+                    }
                     else if (window.myCurrentRole === 'spectator') { this.input.moveX = dx / 40; this.input.moveY = dy / 40; }
                 } else if (window.myCurrentRole === 'gunner' && this.useAR) {
                     let dx = t.clientX - this.lastTapXY.x; let dy = t.clientY - this.lastTapXY.y;
@@ -190,23 +203,40 @@ window.Controls = {
     },
 
     setupActionButtons: function() {
+        const btnPrimary = document.getElementById('btn-primary');
+        const btnSecondary = document.getElementById('btn-secondary');
+
+        if (btnPrimary) {
+            btnPrimary.addEventListener('touchstart', (e) => { e.preventDefault(); this.touchBtns.boost = true; });
+            btnPrimary.addEventListener('touchend', (e) => { e.preventDefault(); this.touchBtns.boost = false; });
+            btnPrimary.addEventListener('mousedown', () => { this.touchBtns.boost = true; });
+            btnPrimary.addEventListener('mouseup', () => { this.touchBtns.boost = false; });
+            btnPrimary.addEventListener('mouseleave', () => { this.touchBtns.boost = false; });
+        }
+
+        if (btnSecondary) {
+            btnSecondary.addEventListener('touchstart', (e) => { e.preventDefault(); this.touchBtns.jump = true; });
+            btnSecondary.addEventListener('touchend', (e) => { e.preventDefault(); this.touchBtns.jump = false; });
+            btnSecondary.addEventListener('mousedown', () => { this.touchBtns.jump = true; });
+            btnSecondary.addEventListener('mouseup', () => { this.touchBtns.jump = false; });
+        }
+
+        // Legacy support for old button IDs
         const btnBoost = document.getElementById('btn-boost');
         const btnJump = document.getElementById('btn-jump');
-        const btnSwap = document.getElementById('btn-ability-swap');
-
-        btnBoost.addEventListener('touchstart', (e) => { e.preventDefault(); this.touchBtns.boost = true; });
-        btnBoost.addEventListener('touchend', (e) => { e.preventDefault(); this.touchBtns.boost = false; });
-        btnJump.addEventListener('touchstart', (e) => { e.preventDefault(); this.touchBtns.jump = true; });
-        btnJump.addEventListener('touchend', (e) => { e.preventDefault(); this.touchBtns.jump = false; });
-
-        btnBoost.addEventListener('mousedown', () => { this.touchBtns.boost = true; });
-        btnBoost.addEventListener('mouseup', () => { this.touchBtns.boost = false; });
-        btnBoost.addEventListener('mouseleave', () => { this.touchBtns.boost = false; });
-        btnJump.addEventListener('mousedown', () => { this.touchBtns.jump = true; });
-        btnJump.addEventListener('mouseup', () => { this.touchBtns.jump = false; });
-
-        btnSwap.addEventListener('mousedown', () => { this.input.switchAbility = true; });
-        btnSwap.addEventListener('touchstart', (e) => { e.preventDefault(); this.input.switchAbility = true; });
+        if (btnBoost) {
+            btnBoost.addEventListener('touchstart', (e) => { e.preventDefault(); this.touchBtns.boost = true; });
+            btnBoost.addEventListener('touchend', (e) => { e.preventDefault(); this.touchBtns.boost = false; });
+            btnBoost.addEventListener('mousedown', () => { this.touchBtns.boost = true; });
+            btnBoost.addEventListener('mouseup', () => { this.touchBtns.boost = false; });
+            btnBoost.addEventListener('mouseleave', () => { this.touchBtns.boost = false; });
+        }
+        if (btnJump) {
+            btnJump.addEventListener('touchstart', (e) => { e.preventDefault(); this.touchBtns.jump = true; });
+            btnJump.addEventListener('touchend', (e) => { e.preventDefault(); this.touchBtns.jump = false; });
+            btnJump.addEventListener('mousedown', () => { this.touchBtns.jump = true; });
+            btnJump.addEventListener('mouseup', () => { this.touchBtns.jump = false; });
+        }
     },
 
     setupKeyboard: function() {
@@ -222,6 +252,7 @@ window.Controls = {
             if (this.keys['KeyA']) this.input.moveX = -1; else if (this.keys['KeyD']) this.input.moveX = 1; else if (!this.touchId) this.input.moveX = 0;
 
             this.input.isBoosting = Boolean(this.touchBtns.boost || this.keys['ShiftLeft'] || this.keys['ShiftRight']);
+            this.input.holdingJump = Boolean(this.touchBtns.jump || this.keys['Space']);
             if (this.touchBtns.jump || this.keys['Space']) { this.input.triggerJump = true; this.keys['Space'] = false; this.touchBtns.jump = false;}
         }
 

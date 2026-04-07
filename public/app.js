@@ -20,6 +20,20 @@ window.visualTanks = {};
 window.bulletPool = [];
 window.zonePool = [];
 
+// Screen shake state
+window.shakeTimer = 0;
+window.shakeIntensity = 0;
+window.shakeOffset = new THREE.Vector3();
+
+// FOV state
+window.targetFOV = 75;
+window.currentFOV = 75;
+
+// Death cam state
+window.deathCamTimer = 0;
+window.deathCamPos = null;
+window.deathCamTarget = null;
+
 const pingGeo = new THREE.CylinderGeometry(1.5, 1.5, 60, 8); pingGeo.translate(0, 30, 0);
 const bulletGeo = new THREE.CylinderGeometry(0.5, 0.5, 10.0, 8); bulletGeo.rotateX(Math.PI / 2);
 const bulletMat = new THREE.MeshBasicMaterial({color: 0x6dcbc3});
@@ -105,9 +119,6 @@ window.onLaunchGame = function(mapName) {
 
     if (window.isSpectating) {
         document.getElementById('crosshair').classList.add('hidden');
-        document.getElementById('btn-boost').classList.add('hidden');
-        document.getElementById('btn-jump').classList.add('hidden');
-        document.getElementById('hud-bars').classList.add('hidden');
     } else {
         document.getElementById('crosshair').style.transition = 'transform 0.1s, background-color 0.1s, border-color 0.1s, border-radius 0.1s';
     }
@@ -143,19 +154,24 @@ window.updateGame = function(serverState) {
     else if (window.isSpectating) { window.myCurrentRole = 'spectator'; }
 
     if (!window.isSpectating) {
-        document.getElementById('crosshair').classList.remove('hidden'); document.getElementById('btn-boost').classList.remove('hidden');
-        document.getElementById('btn-jump').classList.remove('hidden'); document.getElementById('hud-bars').classList.remove('hidden');
-        document.getElementById('btn-switch-seat').classList.remove('hidden');
+        const btnCluster = document.getElementById('btn-cluster');
+        const crosshair = document.getElementById('crosshair');
+        const switchSeat = document.getElementById('btn-switch-seat');
+        if (btnCluster) btnCluster.classList.remove('hidden');
+        if (switchSeat) switchSeat.classList.remove('hidden');
         if (window.minimapCanvas) window.minimapCanvas.classList.remove('hidden');
 
+        const btnPrimary = document.getElementById('btn-primary');
+        const btnSecondary = document.getElementById('btn-secondary');
+
         if (window.myCurrentRole === 'driver') {
-            document.getElementById('btn-boost').innerText = 'BOOST';
-            document.getElementById('btn-jump').innerText = 'JUMP';
-            document.getElementById('crosshair').classList.add('hidden');
-            document.getElementById('btn-ability-swap').classList.add('hidden');
-        } else {
-            document.getElementById('btn-boost').innerText = 'SHOOT';
-            document.getElementById('btn-ability-swap').classList.remove('hidden');
+            if (btnPrimary) btnPrimary.textContent = 'A';
+            if (btnSecondary) btnSecondary.textContent = 'B';
+            if (crosshair) crosshair.classList.add('hidden');
+        } else if (window.myCurrentRole === 'gunner') {
+            if (btnPrimary) btnPrimary.textContent = 'A';
+            if (btnSecondary) btnSecondary.textContent = 'B';
+            if (crosshair) crosshair.classList.remove('hidden');
         }
     }
 
@@ -177,12 +193,36 @@ window.updateGame = function(serverState) {
 
         let tank = window.visualTanks[tId];
 
-        if (sp.isDead && !tank.wasDead) { window.Graphics.createShatterParticles(tank.position); tank.turretRef.visible = false; }
+        if (sp.isDead && !tank.wasDead) {
+            window.Graphics.createShatterParticles(tank.position);
+            tank.turretRef.visible = false;
+            // Death cam for own tank
+            if (tId === window.myCurrentTankId) {
+                window.deathCamTimer = 2.0;
+                window.deathCamPos = tank.position.clone().add(new THREE.Vector3(0, 40, 30));
+                window.deathCamTarget = tank.position.clone();
+            }
+        }
         tank.wasDead = sp.isDead; tank.visible = !sp.isDead;
         if (!sp.isDead) tank.turretRef.visible = true;
 
         if (!sp.isDead) {
             let newTargetPos = new THREE.Vector3(sp.x, sp.y, sp.z);
+
+            // Landing impact detection
+            let prevY = tank.lastNetPos ? tank.lastNetPos.y : sp.y;
+            let wasAirborne = tank.wasAirborne || false;
+            let isGrounded = (sp.y <= window.getTerrainHeight(sp.x, sp.z, window.currentMapName) + 0.5);
+            let landingVel = prevY - sp.y;
+            if (wasAirborne && isGrounded && landingVel > 1.5) {
+                window.Graphics.createShatterParticles(newTargetPos.clone(), Math.floor(landingVel * 4), 0x888888);
+                if (tId === window.myCurrentTankId) {
+                    window.shakeTimer = 0.2;
+                    window.shakeIntensity = Math.min(1.5, landingVel * 0.2);
+                }
+            }
+            tank.wasAirborne = !isGrounded;
+
             tank.serverVelocity = tank.lastNetPos ? newTargetPos.clone().sub(tank.lastNetPos).multiplyScalar(30) : new THREE.Vector3(0,0,0);
             tank.lastNetPos = newTargetPos.clone(); tank.targetPos = newTargetPos.clone();
             tank.targetQuat = new THREE.Quaternion(sp.qx, sp.qy, sp.qz, sp.qw);
@@ -197,7 +237,52 @@ window.updateGame = function(serverState) {
             }
             if (sp.isBoosting && sp.boost > 0) window.Graphics.emitSparks(tank, sp.rot, sp.config, sp.speed);
 
-            // --- DRAW THE GRAPPLE LASER ---
+            // --- HEALTH RING (segmented, around tank base) ---
+            if (!tank.healthRing) {
+                tank.healthRing = [];
+                const ringGeo = new THREE.TorusGeometry(2.5, 0.2, 6, 8, Math.PI * 2 / 5 * 0.8);
+                for (let seg = 0; seg < 5; seg++) {
+                    const mat = new THREE.MeshBasicMaterial({ color: 0x00ff88, transparent: true, opacity: 0.85 });
+                    const mesh = new THREE.Mesh(ringGeo, mat);
+                    mesh.rotation.x = Math.PI / 2;
+                    mesh.rotation.z = seg * (Math.PI * 2 / 5);
+                    window.Graphics.matchGroup.add(mesh);
+                    tank.healthRing.push(mesh);
+                }
+            }
+            let segsAlive = Math.ceil(sp.health / 20);
+            for (let seg = 0; seg < 5; seg++) {
+                let ringMesh = tank.healthRing[seg];
+                ringMesh.visible = seg < segsAlive;
+                ringMesh.position.set(sp.x, sp.y + 0.3, sp.z);
+                let ringColor = segsAlive > 3 ? 0x00ff88 : segsAlive > 1 ? 0xffaa00 : 0xff2222;
+                ringMesh.material.color.setHex(ringColor);
+            }
+
+            // --- TEAMMATE AIM INDICATOR LINE ---
+            let isTeamTank = window.currentMatchMode === '3v3' && window.myCurrentTankId &&
+                (parseInt(tId.replace('tank','')) <= Math.ceil(Object.keys(serverState.tanks).length/2)) ===
+                (parseInt(window.myCurrentTankId.replace('tank','')) <= Math.ceil(Object.keys(serverState.tanks).length/2));
+            let isMyTank = (tId === window.myCurrentTankId);
+            if (!isMyTank && (isTeamTank || window.currentMatchMode !== '3v3')) {
+                // Show aim line for all tanks (helps coord for nearby teammates)
+                if (!tank.aimLine) {
+                    const lMat = new THREE.LineBasicMaterial({ color: 0x6dcbc3, transparent: true, opacity: 0.3 });
+                    const lGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
+                    tank.aimLine = new THREE.Line(lGeo, lMat);
+                    window.Graphics.matchGroup.add(tank.aimLine);
+                }
+                let barrelStart = tank.turretRef ? tank.turretRef.position.clone() : new THREE.Vector3(sp.x, sp.y + 2.2, sp.z);
+                let yaw = sp.turretYaw; let pitch = sp.turretPitch;
+                let aimDir = new THREE.Vector3(-Math.sin(yaw)*Math.cos(pitch), Math.sin(pitch), -Math.cos(yaw)*Math.cos(pitch));
+                let barrelEnd = barrelStart.clone().addScaledVector(aimDir, 30);
+                tank.aimLine.geometry.setFromPoints([barrelStart, barrelEnd]);
+                tank.aimLine.visible = true;
+            } else if (tank.aimLine) {
+                tank.aimLine.visible = false;
+            }
+
+            // --- GRAPPLE LASER ---
             if (sp.isGrappling) {
                 if (!tank.grappleLine) {
                     const lineMat = new THREE.LineBasicMaterial({ color: 0x00ffcc, linewidth: 4, transparent: true, opacity: 0.8 });
@@ -216,19 +301,38 @@ window.updateGame = function(serverState) {
                 if (tank.grappleLine) tank.grappleLine.visible = false;
             }
 
+            // --- HUD RING INDICATOR (replaces hud-bars for player's tank) ---
             if (tId === window.myCurrentTankId) {
-                const barLabel = document.getElementById('bar-label'); const barFill = document.getElementById('bar-fill');
-                if (window.myCurrentRole === 'driver') {
-                    barLabel.innerText = 'BOOST CAPACITY'; barLabel.style.color = 'var(--neon-green)';
-                    barFill.style.width = `${Math.max(0, sp.boost)}%`; barFill.style.background = sp.boost > 0 ? 'var(--neon-green)' : 'var(--neon-pink)';
-                } else if (window.myCurrentRole === 'gunner') {
-                    barLabel.innerText = 'BLAST READY'; barLabel.style.color = 'var(--neon-cyan)';
-                    let blastPct = Math.max(0, 100 - (sp.bombCooldown / 2.0) * 100);
-                    barFill.style.width = `${blastPct}%`; barFill.style.background = blastPct >= 100 ? 'var(--neon-cyan)' : 'var(--neon-orange)';
-
-                    // Dynamically change button text based on equipped ability
-                    document.getElementById('btn-jump').innerText = sp.gunnerAbility === 'grapple' ? 'GRAPPLE' : 'LIFT';
+                const ringFill = document.getElementById('ring-fill');
+                const btnPrimary = document.getElementById('btn-primary');
+                const CIRCUMFERENCE = 276.46;
+                if (ringFill) {
+                    let pct = 1.0;
+                    if (window.myCurrentRole === 'driver') {
+                        pct = Math.max(0, sp.boost) / 100;
+                        ringFill.style.stroke = pct > 0.2 ? 'var(--neon-cyan)' : 'var(--neon-pink)';
+                        if (btnPrimary) btnPrimary.textContent = 'A';
+                    } else if (window.myCurrentRole === 'gunner') {
+                        pct = Math.max(0, 1 - sp.bombCooldown / 2.5);
+                        ringFill.style.stroke = pct >= 1 ? 'var(--neon-cyan)' : '#ff8c00';
+                        if (btnPrimary) btnPrimary.textContent = 'A';
+                    }
+                    ringFill.style.strokeDashoffset = CIRCUMFERENCE * (1 - pct);
                 }
+
+                // Health vignette
+                const vignette = document.getElementById('health-vignette');
+                if (vignette) {
+                    if (sp.health < 50) {
+                        let intensity = (50 - sp.health) / 50;
+                        vignette.style.background = `radial-gradient(ellipse at center, transparent 40%, rgba(255,30,30,${intensity * 0.6}) 100%)`;
+                    } else {
+                        vignette.style.background = 'none';
+                    }
+                }
+
+                // FOV shift when boosting (3a)
+                window.targetFOV = (sp.isBoosting && sp.boost > 0) ? 95 : (window.myCurrentRole === 'driver' ? 75 : 85);
             }
 
             if (window.minimapCtx && !window.isSpectating) {
@@ -239,6 +343,11 @@ window.updateGame = function(serverState) {
                 if (tId === window.myCurrentTankId) dotColor = '#b4d455'; else if (window.currentMatchMode === '3v3' && myTeam === otherTeam) dotColor = '#6dcbc3';
                 let center = window.minimapCanvas.width / 2;
                 window.minimapCtx.fillStyle = dotColor; window.minimapCtx.beginPath(); window.minimapCtx.arc(center + (sp.x/400)*center, center + (sp.z/400)*center, 4, 0, Math.PI*2); window.minimapCtx.fill();
+            }
+        } else {
+            // Clean up health ring for dead tanks
+            if (tank.healthRing) {
+                for (let mesh of tank.healthRing) { mesh.visible = false; }
             }
         }
     }
@@ -270,8 +379,30 @@ window.updateGame = function(serverState) {
     if (serverState.hits) {
         serverState.hits.forEach(hit => {
             window.Graphics.createShatterParticles(new THREE.Vector3(hit.x, hit.y, hit.z), 3, 0xffe600);
-            if (hit.owner === window.myCurrentTankId && window.myCurrentRole === 'gunner') window.hitFlashTimer = 0.15;
+            if (hit.owner === window.myCurrentTankId && window.myCurrentRole === 'gunner') {
+                window.hitFlashTimer = 0.15;
+                // Camera punch forward
+                window.shakeTimer = 0.12;
+                window.shakeIntensity = 0.4;
+                // Floating damage number
+                spawnDamageNumber(hit.x, hit.y, hit.z, hit.damage || 6);
+            }
         });
+    }
+
+    // Screen shake on being hit by concussive blast (check health drop)
+    for (let tId in serverState.tanks) {
+        if (tId === window.myCurrentTankId) {
+            let sp = serverState.tanks[tId];
+            let prevHealth = window._prevHealth || 100;
+            let dmg = prevHealth - sp.health;
+            if (dmg > 10 && !sp.isDead) {
+                window.shakeTimer = 0.3;
+                window.shakeIntensity = Math.min(3.0, dmg * 0.05);
+            }
+            window._prevHealth = sp.health;
+            if (sp.isDead) window._prevHealth = 100;
+        }
     }
 
     if (serverState.shutters) {
@@ -285,6 +416,32 @@ window.updateGame = function(serverState) {
         });
     }
 };
+
+// --- Floating damage number spawn ---
+function spawnDamageNumber(worldX, worldY, worldZ, damage) {
+    const container = document.getElementById('dmg-numbers');
+    if (!container) return;
+    const el = document.createElement('div');
+    el.textContent = '-' + Math.round(damage);
+    el.style.cssText = 'position:absolute;color:#ffe600;font-weight:bold;font-size:1.1rem;font-family:Courier New,monospace;text-shadow:0 0 6px #000;pointer-events:none;transition:none;';
+    // Project world pos to screen
+    const vec = new THREE.Vector3(worldX, worldY + 3, worldZ);
+    vec.project(window.Graphics.camera);
+    let sx = (vec.x * 0.5 + 0.5) * window.innerWidth;
+    let sy = (-vec.y * 0.5 + 0.5) * window.innerHeight;
+    el.style.left = sx + 'px'; el.style.top = sy + 'px';
+    el.style.transform = 'translate(-50%, -50%)';
+    container.appendChild(el);
+    let life = 0;
+    const tick = () => {
+        life += 0.016;
+        el.style.top = (sy - life * 60) + 'px';
+        el.style.opacity = Math.max(0, 1 - life / 0.8);
+        if (life < 0.8) requestAnimationFrame(tick);
+        else el.remove();
+    };
+    requestAnimationFrame(tick);
+}
 
 const clock = new THREE.Clock();
 
@@ -311,6 +468,18 @@ function animate() {
             window.Graphics.camera.position.lerp(idealPos, 8 * delta); window.Graphics.camera.lookAt(targetX, py + 2, targetZ);
         }
     } else {
+        // --- FOV LERP (3a) ---
+        window.currentFOV = THREE.MathUtils.lerp(window.currentFOV, window.targetFOV, delta / 0.2);
+
+        // --- SCREEN SHAKE (3b) ---
+        if (window.shakeTimer > 0) {
+            window.shakeTimer -= delta;
+            let s = window.shakeIntensity * (window.shakeTimer / 0.3);
+            window.shakeOffset.set((Math.random() - 0.5) * s, (Math.random() - 0.5) * s * 0.5, (Math.random() - 0.5) * s);
+        } else {
+            window.shakeOffset.set(0, 0, 0);
+        }
+
         if (window.myCurrentRole === 'spectator') {
             let sSpeed = window.Controls.input.isBoosting ? 150 : 60;
             let forward = new THREE.Vector3(0,0,-1).applyAxisAngle(new THREE.Vector3(0,1,0), window.Controls.specCam.yaw);
@@ -355,37 +524,55 @@ function animate() {
             else { p.mesh.scale.y = Math.max(0, p.life / 4.0); }
         }
 
-        for (let tId in window.visualTanks) {
-            let tank = window.visualTanks[tId];
-            if (tank.targetPos && !tank.wasDead) {
-		        if (tank.serverVelocity) tank.targetPos.add(tank.serverVelocity.clone().multiplyScalar(delta));
-                tank.position.lerp(tank.targetPos, 10 * delta); tank.quaternion.slerp(tank.targetQuat, 12 * delta);
-                let visualGroundY = window.getTerrainHeight(tank.position.x, tank.position.z, window.currentMapName); if (tank.position.y < visualGroundY) tank.position.y = visualGroundY;
-                tank.currentTurretYOffset = THREE.MathUtils.lerp(tank.currentTurretYOffset || 0, tank.targetTurretYOffset || 0, 15 * delta);
-                tank.turretRef.position.copy(tank.position); tank.turretRef.position.y += 2.2 + tank.currentTurretYOffset;
+        // --- DEATH CAM (3g) ---
+        if (window.deathCamTimer > 0) {
+            window.deathCamTimer -= delta;
+            if (window.deathCamPos && window.deathCamTarget) {
+                window.Graphics.camera.position.lerp(window.deathCamPos, 8 * delta);
+                window.Graphics.camera.lookAt(window.deathCamTarget);
+            }
+            if (window.deathCamTimer <= 0) {
+                window.deathCamPos = null; window.deathCamTarget = null;
+            }
+        } else {
+            for (let tId in window.visualTanks) {
+                let tank = window.visualTanks[tId];
+                if (tank.targetPos && !tank.wasDead) {
+                    if (tank.serverVelocity) tank.targetPos.add(tank.serverVelocity.clone().multiplyScalar(delta));
+                    tank.position.lerp(tank.targetPos, 10 * delta); tank.quaternion.slerp(tank.targetQuat, 12 * delta);
+                    let visualGroundY = window.getTerrainHeight(tank.position.x, tank.position.z, window.currentMapName); if (tank.position.y < visualGroundY) tank.position.y = visualGroundY;
+                    tank.currentTurretYOffset = THREE.MathUtils.lerp(tank.currentTurretYOffset || 0, tank.targetTurretYOffset || 0, 15 * delta);
+                    tank.turretRef.position.copy(tank.position); tank.turretRef.position.y += 2.2 + tank.currentTurretYOffset;
 
-                if (tId === window.myCurrentTankId && window.myCurrentRole === 'gunner') { tank.targetTurretYaw = window.Controls.localAim.yaw; tank.targetTurretPitch = window.Controls.localAim.pitch; }
-                tank.turretRef.rotation.y = THREE.MathUtils.lerp(tank.turretRef.rotation.y, tank.targetTurretYaw || 0, 20 * delta); tank.pitchRef.rotation.x = THREE.MathUtils.lerp(tank.pitchRef.rotation.x, (tank.targetTurretPitch || 0), 20 * delta);
+                    if (tId === window.myCurrentTankId && window.myCurrentRole === 'gunner') { tank.targetTurretYaw = window.Controls.localAim.yaw; tank.targetTurretPitch = window.Controls.localAim.pitch; }
+                    tank.turretRef.rotation.y = THREE.MathUtils.lerp(tank.turretRef.rotation.y, tank.targetTurretYaw || 0, 20 * delta); tank.pitchRef.rotation.x = THREE.MathUtils.lerp(tank.pitchRef.rotation.x, (tank.targetTurretPitch || 0), 20 * delta);
 
-                if (tId === window.myCurrentTankId) {
-                    if (window.myCurrentRole === 'driver') {
-                        window.Graphics.camera.up.set(0, 1, 0); window.Graphics.camera.fov = 75; window.Graphics.camera.updateProjectionMatrix();
-                        const forward = new THREE.Vector3(0, 0, -1).applyAxisAngle(new THREE.Vector3(0,1,0), tank.targetRot || 0);
-                        const idealPos = tank.position.clone().add(forward.multiplyScalar(-24)); let camGround = window.getTerrainHeight(idealPos.x, idealPos.z, window.currentMapName); idealPos.y = Math.max(camGround + 8, tank.position.y + 12);
-                        window.Graphics.camera.position.lerp(idealPos, 10 * delta); window.Graphics.camera.lookAt(tank.position.clone().add(new THREE.Vector3(0, 3, 0)));
-                    } else if (window.myCurrentRole === 'gunner') {
-                        window.Graphics.camera.up.set(0, 1, 0); window.Graphics.camera.fov = 85; window.Graphics.camera.updateProjectionMatrix();
-                        let pitch = tank.targetTurretPitch || 0; let yaw = tank.targetTurretYaw || 0;
-                        let aimDirX = -Math.sin(yaw) * Math.cos(pitch); let aimDirY = Math.sin(pitch); let aimDirZ = -Math.cos(yaw) * Math.cos(pitch);
-                        const aimForward3D = new THREE.Vector3(aimDirX, aimDirY, aimDirZ).normalize();
-                        let turretCenter = tank.turretRef.position.clone(); let idealDist = 14.0;
-                        let idealPos = turretCenter.clone().add(aimForward3D.clone().multiplyScalar(-idealDist)); idealPos.y += 3.5;
-                        let rayDir = idealPos.clone().sub(turretCenter).normalize(); let rayLength = turretCenter.distanceTo(idealPos);
-                        const camRaycaster = new THREE.Raycaster(turretCenter, rayDir, 0, rayLength); const intersects = camRaycaster.intersectObjects(window.Graphics.matchGroup.children, true);
-                        let finalDist = rayLength;
-                        for (let i = 0; i < intersects.length; i++) { let obj = intersects[i].object; if (obj.userData && (obj.userData.type === 'obstacle' || obj.userData.type === 'floor')) { finalDist = Math.max(2.0, intersects[i].distance - 1.0); break; } }
-                        let finalCamPos = turretCenter.clone().add(rayDir.multiplyScalar(finalDist)); window.Graphics.camera.position.lerp(finalCamPos, 15 * delta);
-                        let lookAtPoint = turretCenter.clone().add(aimForward3D.multiplyScalar(200.0)); window.Graphics.camera.lookAt(lookAtPoint);
+                    if (tId === window.myCurrentTankId) {
+                        if (window.myCurrentRole === 'driver') {
+                            window.Graphics.camera.up.set(0, 1, 0);
+                            window.Graphics.camera.fov = window.currentFOV;
+                            window.Graphics.camera.updateProjectionMatrix();
+                            const forward = new THREE.Vector3(0, 0, -1).applyAxisAngle(new THREE.Vector3(0,1,0), tank.targetRot || 0);
+                            const idealPos = tank.position.clone().add(forward.multiplyScalar(-24)); let camGround = window.getTerrainHeight(idealPos.x, idealPos.z, window.currentMapName); idealPos.y = Math.max(camGround + 8, tank.position.y + 12);
+                            let finalPos = idealPos.clone().add(window.shakeOffset);
+                            window.Graphics.camera.position.lerp(finalPos, 10 * delta); window.Graphics.camera.lookAt(tank.position.clone().add(new THREE.Vector3(0, 3, 0)));
+                        } else if (window.myCurrentRole === 'gunner') {
+                            window.Graphics.camera.up.set(0, 1, 0);
+                            window.Graphics.camera.fov = window.currentFOV;
+                            window.Graphics.camera.updateProjectionMatrix();
+                            let pitch = tank.targetTurretPitch || 0; let yaw = tank.targetTurretYaw || 0;
+                            let aimDirX = -Math.sin(yaw) * Math.cos(pitch); let aimDirY = Math.sin(pitch); let aimDirZ = -Math.cos(yaw) * Math.cos(pitch);
+                            const aimForward3D = new THREE.Vector3(aimDirX, aimDirY, aimDirZ).normalize();
+                            let turretCenter = tank.turretRef.position.clone(); let idealDist = 14.0;
+                            let idealPos = turretCenter.clone().add(aimForward3D.clone().multiplyScalar(-idealDist)); idealPos.y += 3.5;
+                            let rayDir = idealPos.clone().sub(turretCenter).normalize(); let rayLength = turretCenter.distanceTo(idealPos);
+                            const camRaycaster = new THREE.Raycaster(turretCenter, rayDir, 0, rayLength); const intersects = camRaycaster.intersectObjects(window.Graphics.matchGroup.children, true);
+                            let finalDist = rayLength;
+                            for (let i = 0; i < intersects.length; i++) { let obj = intersects[i].object; if (obj.userData && (obj.userData.type === 'obstacle' || obj.userData.type === 'floor')) { finalDist = Math.max(2.0, intersects[i].distance - 1.0); break; } }
+                            let finalCamPos = turretCenter.clone().add(rayDir.multiplyScalar(finalDist)).add(window.shakeOffset);
+                            window.Graphics.camera.position.lerp(finalCamPos, 15 * delta);
+                            let lookAtPoint = turretCenter.clone().add(aimForward3D.multiplyScalar(200.0)); window.Graphics.camera.lookAt(lookAtPoint);
+                        }
                     }
                 }
             }
