@@ -6,89 +6,14 @@
     <title>Blow 'em Up Buddies</title>
     <link rel="stylesheet" href="/style.css">
 
-    <style>
-        /* Mobile UI Layout & Halo HUD Overrides */
-        #btn-boost {
-            position: absolute !important;
-            bottom: 20px !important;
-            right: 20px !important;
-            width: 85px !important;
-            height: 85px !important;
-            border-radius: 50% !important;
-            font-size: 1rem !important;
-            z-index: 100;
-        }
-
-        #btn-jump {
-            position: absolute !important;
-            bottom: 115px !important;
-            right: 100px !important;
-            width: 65px !important;
-            height: 65px !important;
-            border-radius: 50% !important;
-            font-size: 0.75rem !important;
-            z-index: 100;
-        }
-
-        #btn-ability-swap {
-            position: absolute !important;
-            bottom: 185px !important;
-            right: 115px !important;
-            width: 45px !important;
-            height: 45px !important;
-            border-radius: 50% !important;
-            font-size: 0.6rem !important;
-            background: rgba(212, 74, 142, 0.8) !important;
-            border: 2px solid #fff !important;
-            color: #fff !important;
-            z-index: 100;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: bold;
-        }
-
-        #hud-bars {
-            top: 20px !important;
-            right: 20px !important;
-            bottom: auto !important;
-            left: auto !important;
-            transform: none !important;
-            width: 250px !important;
-            text-align: right !important;
-            z-index: 50;
-        }
-
-        #minimap {
-            top: 20px !important;
-            left: 20px !important;
-            right: auto !important;
-            border-radius: 12px !important;
-            border: 2px solid rgba(109, 203, 195, 0.5) !important;
-            box-shadow: 0 0 15px rgba(109, 203, 195, 0.2);
-        }
-
-        #btn-switch-seat {
-            position: absolute !important;
-            top: 20px !important;
-            left: 50% !important;
-            transform: translateX(-50%) !important;
-            background: rgba(15, 12, 27, 0.8) !important;
-            border: 2px solid var(--neon-cyan) !important;
-            color: #fff !important;
-            padding: 8px 16px !important;
-            border-radius: 20px !important;
-            font-weight: bold !important;
-            z-index: 100 !important;
-            letter-spacing: 1px !important;
-        }
-    </style>
-
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="/socket.io/socket.io.js"></script>
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
 </head>
 <body>
+
+    <!-- Health vignette overlay -->
+    <div id="health-vignette"></div>
 
     <div id="ui-layer">
         <div id="start-screen" class="screen interactive">
@@ -133,7 +58,16 @@
             </div>
         </div>
 
+        <!-- LOBBY: collapsible bottom drawer on mobile -->
         <div id="lobby-screen" class="hub-container interactive hidden">
+            <!-- Drawer handle (mobile only) -->
+            <div id="lobby-drawer-handle" class="lobby-drawer-handle">
+                <div class="drawer-pill"></div>
+                <span id="lobby-code-inline" class="room-code-inline">ROOM: ----</span>
+                <span id="lobby-seat-inline" class="seat-inline"></span>
+                <button id="btn-ready-inline" class="ready-inline-btn">READY UP</button>
+            </div>
+
             <div id="view-roster" class="hub-view">
                 <div class="hub-header">
                     <button class="icon-btn" id="btn-leave-hub"><i class="ph ph-arrow-left"></i></button>
@@ -178,22 +112,36 @@
             </div>
         </div>
 
-        <button id="btn-switch-seat" class="interactive hidden">SWAP SEAT</button>
+        <button id="btn-switch-seat" class="interactive hidden">SWAP</button>
         <div id="crosshair" class="hidden"></div>
         <div id="joy-base" class="joystick-base hidden"><div id="joy-nub" class="joystick-nub"></div></div>
 
-        <div id="btn-boost" class="action-button interactive hidden">BOOST</div>
-        <div id="btn-jump" class="action-button interactive hidden">JUMP</div>
-        <div id="btn-ability-swap" class="interactive hidden">SWAP</div>
-
-        <canvas id="minimap" width="120" height="120" class="hidden" style="position: absolute; background: rgba(15, 12, 27, 0.8); z-index: 100;"></canvas>
-
-        <div id="hud-bars" class="hidden" style="position: absolute; pointer-events: none;">
-            <div id="bar-label" style="color: var(--neon-green); font-size: 0.85rem; font-weight: bold; margin-bottom: 5px; text-shadow: 0 0 4px #000; letter-spacing: 1px;">BOOST CAPACITY</div>
-            <div style="width: 100%; height: 14px; background: rgba(0,0,0,0.6); border: 2px solid rgba(255,255,255,0.2); border-radius: 4px; overflow: hidden; box-shadow: 0 0 10px rgba(0,0,0,0.5);">
-                <div id="bar-fill" style="width: 100%; height: 100%; float: right; background: var(--neon-green); transition: width 0.1s linear, background-color 0.2s;"></div>
-            </div>
+        <!-- Gameboy A/B buttons (bottom-right) -->
+        <div id="btn-cluster" class="hidden">
+            <!-- Ring SVG indicator around primary button -->
+            <svg id="ring-indicator" class="ring-svg" viewBox="0 0 100 100">
+                <circle cx="50" cy="50" r="44" class="ring-track"/>
+                <circle id="ring-fill" cx="50" cy="50" r="44" class="ring-fill"/>
+            </svg>
+            <div id="btn-primary" class="action-button btn-a interactive">A</div>
+            <div id="btn-secondary" class="action-button btn-b interactive">B</div>
         </div>
+
+        <!-- Legacy IDs kept for backward compat with app.js HUD updates -->
+        <div id="btn-boost" class="hidden" style="display:none!important;"></div>
+        <div id="btn-jump" class="hidden" style="display:none!important;"></div>
+        <div id="btn-ability-swap" class="hidden" style="display:none!important;"></div>
+
+        <canvas id="minimap" width="100" height="100" class="hidden" style="position: absolute; background: rgba(15, 12, 27, 0.6); z-index: 100; opacity: 0.7;"></canvas>
+
+        <!-- Legacy hud-bars kept hidden; HUD is now the ring indicator -->
+        <div id="hud-bars" style="display:none!important; position:absolute; pointer-events:none;">
+            <div id="bar-label"></div>
+            <div><div id="bar-fill"></div></div>
+        </div>
+
+        <!-- Damage numbers container -->
+        <div id="dmg-numbers" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:200;"></div>
     </div>
 
     <script src="/map-builder.js"></script>

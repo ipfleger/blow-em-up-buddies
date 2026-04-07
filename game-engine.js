@@ -67,14 +67,15 @@ class Match {
         if (mapping && this.tanks[mapping.tankId]) {
             const tank = this.tanks[mapping.tankId];
             if (mapping.role === 'driver') {
-                tank.driverInputs.moveX = input.moveX;
-                tank.driverInputs.moveY = input.moveY;
-                tank.driverInputs.isBoosting = input.isBoosting;
+                tank.driverInputs.moveX = Math.max(-1, Math.min(1, +input.moveX || 0));
+                tank.driverInputs.moveY = Math.max(-1, Math.min(1, +input.moveY || 0));
+                tank.driverInputs.isBoosting = Boolean(input.isBoosting);
+                tank.driverInputs.holdingJump = Boolean(input.holdingJump);
                 if (input.triggerJump) tank.driverInputs.triggerJump = true;
             } else if (mapping.role === 'gunner') {
-                tank.gunnerInputs.aimYaw = input.aimYaw;
-                tank.gunnerInputs.aimPitch = input.aimPitch;
-                tank.gunnerInputs.isFiring = input.isFiring;
+                tank.gunnerInputs.aimYaw = +input.aimYaw || 0;
+                tank.gunnerInputs.aimPitch = Math.max(-Math.PI/2, Math.min(Math.PI/2, +input.aimPitch || 0));
+                tank.gunnerInputs.isFiring = Boolean(input.isFiring);
                 if (input.triggerSecondary) tank.gunnerInputs.triggerSecondary = true;
             }
         }
@@ -135,6 +136,32 @@ class Match {
             let b = this.bullets[i];
             let oldX = b.x, oldY = b.y, oldZ = b.z;
 
+            // --- RAPID-FIRE SEMI-SEEKING ---
+            if (b.type === 'rapid') {
+                let bestTarget = null; let bestDist = 60; let coneCosThreshold = Math.cos(15 * Math.PI / 180);
+                let bLen = Math.hypot(b.dx, b.dy, b.dz);
+                for (let tId in this.tanks) {
+                    if (tId === b.owner || this.tanks[tId].isDead) continue;
+                    let isTeammate = (this.mode === '3v3' && this.getTeam(tId) === this.getTeam(b.owner));
+                    if (isTeammate) continue;
+                    let target = this.tanks[tId];
+                    let tdx = target.position.x - b.x; let tdy = target.position.y - b.y; let tdz = target.position.z - b.z;
+                    let dist = Math.hypot(tdx, tdy, tdz);
+                    if (dist > 0 && dist < bestDist) {
+                        let dot = (b.dx * tdx + b.dy * tdy + b.dz * tdz) / (bLen * dist);
+                        if (dot > coneCosThreshold) { bestDist = dist; bestTarget = { dx: tdx/dist, dy: tdy/dist, dz: tdz/dist }; }
+                    }
+                }
+                if (bestTarget) {
+                    let seekStr = 0.8 * delta;
+                    b.dx += (bestTarget.dx - b.dx) * seekStr;
+                    b.dy += (bestTarget.dy - b.dy) * seekStr;
+                    b.dz += (bestTarget.dz - b.dz) * seekStr;
+                    let newLen = Math.hypot(b.dx, b.dy, b.dz);
+                    if (newLen > 0) { b.dx /= newLen; b.dy /= newLen; b.dz /= newLen; }
+                }
+            }
+
             b.x += b.dx * b.speed * delta; b.y += b.dy * b.speed * delta; b.z += b.dz * b.speed * delta;
             b.life -= delta;
 
@@ -156,7 +183,7 @@ class Match {
                         this.blastZones.push({ x: cX, y: cY, z: cZ, life: 1.2, owner: b.owner, hasPulsed: false });
                     } else if (b.type === 'rapid') {
                         let isTeammate = (this.mode === '3v3' && this.getTeam(tId) === this.getTeam(b.owner));
-                        if (!isTeammate) {
+                        if (!isTeammate && target.dodgeInvulnTimer <= 0) {
                             target.health -= 6;
                             if (target.health <= 0) target.die();
                         }
@@ -281,7 +308,19 @@ class Match {
                             }
                             else { p1.currentSpeed *= 0.3; p2.currentSpeed *= 0.3; p1.velocity.x += normX * 0.5; p1.velocity.z += normZ * 0.5; p2.velocity.x -= normX * 0.5; p2.velocity.z -= normZ * 0.5; }
                         }
-                    } else { p1.currentSpeed *= 0.8; p2.currentSpeed *= 0.8; }
+                    } else {
+                        // Non-ramming collision: apply bounce with 0.6 restitution
+                        const bounce = 0.6;
+                        let relVelX = p1.velocity.x - p2.velocity.x;
+                        let relVelZ = p1.velocity.z - p2.velocity.z;
+                        let relVelAlongNorm = relVelX * normX + relVelZ * normZ;
+                        if (relVelAlongNorm < 0) {
+                            let impulse = -(1 + bounce) * relVelAlongNorm * 0.5;
+                            p1.velocity.x += impulse * normX; p1.velocity.z += impulse * normZ;
+                            p2.velocity.x -= impulse * normX; p2.velocity.z -= impulse * normZ;
+                        }
+                        p1.currentSpeed *= 0.8; p2.currentSpeed *= 0.8;
+                    }
                 }
             }
         }

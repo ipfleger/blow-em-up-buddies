@@ -320,3 +320,39 @@ function buildPalette(containerId, isTop) {
 
 buildPalette('color-palette-top', true);
 buildPalette('color-palette-bot', false);
+
+// --- Collapsible lobby drawer (mobile portrait) ---
+const drawerHandle = document.getElementById('lobby-drawer-handle');
+const lobbyContainer = document.getElementById('lobby-screen');
+
+if (drawerHandle && lobbyContainer) {
+    drawerHandle.addEventListener('click', () => {
+        lobbyContainer.classList.toggle('drawer-expanded');
+    });
+
+    // Swipe-up to expand
+    let swipeStartY = 0;
+    drawerHandle.addEventListener('touchstart', e => { swipeStartY = e.changedTouches[0].clientY; }, { passive: true });
+    drawerHandle.addEventListener('touchend', e => {
+        let dy = swipeStartY - e.changedTouches[0].clientY;
+        if (dy > 20) lobbyContainer.classList.add('drawer-expanded');
+        else if (dy < -20) lobbyContainer.classList.remove('drawer-expanded');
+    }, { passive: true });
+}
+
+// Sync inline ready button with main ready button
+const inlineReadyBtn = document.getElementById('btn-ready-inline');
+if (inlineReadyBtn) {
+    inlineReadyBtn.addEventListener('click', () => window.socket.emit('toggle-ready'));
+}
+
+// Lobby update: sync inline fields
+const origLobbyUpdate = window.socket._callbacks && window.socket._callbacks['$lobby-update'];
+window.socket.on('lobby-update', (lobby) => {
+    const codeInline = document.getElementById('lobby-code-inline');
+    const seatInline = document.getElementById('lobby-seat-inline');
+    if (codeInline && window.currentRoomCode) codeInline.textContent = 'ROOM: ' + window.currentRoomCode;
+    if (seatInline) {
+        seatInline.textContent = window.myRole ? window.myRole.toUpperCase() : '';
+    }
+});
