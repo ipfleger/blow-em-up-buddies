@@ -110,9 +110,10 @@ window.Controls = {
                 const target = document.elementFromPoint(t.clientX, t.clientY);
                 if(target && (target.classList.contains('action-button') || target.id === 'btn-switch-seat')) continue;
 
+                let now = Date.now();
+
                 // Double-tap right side: recalibrate AR pitch
                 if (this.useAR && t.clientX > window.innerWidth * 0.6) {
-                    let now = Date.now();
                     if (now - this.lastTapTime < 300) {
                         this.baseRawPitch = this.latestRawPitch;
                         this.lastTapTime = 0; continue;
@@ -120,7 +121,6 @@ window.Controls = {
                     this.lastTapTime = now;
                 }
 
-                let now = Date.now();
                 let distFromLastTap = Math.hypot(t.clientX - this.lastTapXY.x, t.clientY - this.lastTapXY.y);
 
                 if (now - this.lastTapTime < 300 && distFromLastTap < 40) {

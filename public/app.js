@@ -418,8 +418,9 @@ window.updateGame = function(serverState) {
 };
 
 // --- Floating damage number spawn ---
+const _dmgNumbersContainer = document.getElementById('dmg-numbers');
 function spawnDamageNumber(worldX, worldY, worldZ, damage) {
-    const container = document.getElementById('dmg-numbers');
+    const container = _dmgNumbersContainer;
     if (!container) return;
     const el = document.createElement('div');
     el.textContent = '-' + Math.round(damage);

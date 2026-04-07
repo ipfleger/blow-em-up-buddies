@@ -265,7 +265,7 @@ class ServerTank {
                 if (mag > 0.2) {
                     const normX = this.driverInputs.moveX / mag; const normY = this.driverInputs.moveY / mag;
                     const forwardPropulsion = -normY * 1.75; const sidePropulsion = -normX;
-                    // Cancel existing vertical velocity before dodge
+                    // Zero out vertical velocity before dodge for clean directional snap
                     this.velocity.y = 0;
                     this.velocity.x += (dirX * forwardPropulsion + rightX * sidePropulsion) * CONFIG.dodgeForce;
                     this.velocity.z += (dirZ * forwardPropulsion + rightZ * sidePropulsion) * CONFIG.dodgeForce;

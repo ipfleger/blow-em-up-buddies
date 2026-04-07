@@ -244,7 +244,7 @@ button:active { transform: scale(0.95); }
     width: 100vw; height: 100vh;
     pointer-events: none;
     z-index: 5;
-    background: radial-gradient(ellipse at center, transparent 55%, rgba(255, 30, 30, 0) 100%);
+    background: radial-gradient(ellipse at center, transparent 55%, transparent 100%);
     transition: background 0.3s;
 }
 
