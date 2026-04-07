@@ -313,7 +313,7 @@ window.updateGame = function(serverState) {
                         ringFill.style.stroke = pct > 0.2 ? 'var(--neon-cyan)' : 'var(--neon-pink)';
                         if (btnPrimary) btnPrimary.textContent = 'A';
                     } else if (window.myCurrentRole === 'gunner') {
-                        pct = Math.max(0, 1 - sp.bombCooldown / 2.5);
+                        pct = Math.max(0, 1 - sp.bombCooldown / 1.25);
                         ringFill.style.stroke = pct >= 1 ? 'var(--neon-cyan)' : '#ff8c00';
                         if (btnPrimary) btnPrimary.textContent = 'A';
                     }
