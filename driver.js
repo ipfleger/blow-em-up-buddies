@@ -94,7 +94,7 @@ class ServerTank {
 
         // PRIMARY WEAPON: Massive Concussive Blast (Slow)
         if (this.gunnerInputs.isFiring && this.bombCooldown <= 0) {
-            this.bombCooldown = 2.5; // Long cooldown
+            this.bombCooldown = 1.25; // Long cooldown
             this.fireConcussive = true;
         }
 

@@ -76,7 +76,7 @@ class Match {
                 tank.gunnerInputs.aimYaw = +input.aimYaw || 0;
                 tank.gunnerInputs.aimPitch = Math.max(-Math.PI/2, Math.min(Math.PI/2, +input.aimPitch || 0));
                 tank.gunnerInputs.isFiring = Boolean(input.isFiring);
-                if (input.triggerSecondary) tank.gunnerInputs.triggerSecondary = true;
+                tank.gunnerInputs.triggerSecondary = Boolean(input.triggerSecondary);
             }
         }
     }

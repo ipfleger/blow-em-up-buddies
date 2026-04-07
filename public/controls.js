@@ -104,7 +104,7 @@ window.Controls = {
     setupTouchControls: function() {
         document.addEventListener('touchstart', e => {
             if (!window.isMatchActive) { this.lobbyDragActive = true; this.lobbyDragStartX = e.touches[0].clientX; }
-            if(document.getElementById('start-screen').classList.contains('hidden') && document.getElementById('lobby-screen').classList.contains('hidden')) return;
+            if(!document.getElementById('start-screen').classList.contains('hidden') || !document.getElementById('lobby-screen').classList.contains('hidden')) return;
 
             for(let t of e.changedTouches) {
                 const target = document.elementFromPoint(t.clientX, t.clientY);
@@ -154,7 +154,7 @@ window.Controls = {
                 let dx = e.touches[0].clientX - this.lobbyDragStartX;
                 this.manualLobbyRot -= dx * 0.01; this.lobbyDragStartX = e.touches[0].clientX;
             }
-            if(document.getElementById('start-screen').classList.contains('hidden') && document.getElementById('lobby-screen').classList.contains('hidden')) return;
+            if(!document.getElementById('start-screen').classList.contains('hidden') || !document.getElementById('lobby-screen').classList.contains('hidden')) return;
             e.preventDefault();
 
             for(let t of e.changedTouches) {
