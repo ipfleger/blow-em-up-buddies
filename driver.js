@@ -6,13 +6,22 @@ const trunc1 = (val) => Math.round(val * 10) / 10;
 const trunc2 = (val) => Math.round(val * 100) / 100;
 const trunc3 = (val) => Math.round(val * 1000) / 1000;
 
-const CONFIG = { maxBoost: 100, gravity: -0.12, jumpForce: 2.0, dodgeForce: 2.5 };
+const CONFIG = { maxBoost: 100, gravity: -0.04, jumpForce: 3.5, dodgeForce: 4.0 };
 
 const MONOLITHS = [
-    { x: 80, z: 80, r: 8, h: 80 }, { x: -80, z: 80, r: 8, h: 80 },
-    { x: 80, z: -80, r: 8, h: 80 }, { x: -80, z: -80, r: 8, h: 80 },
+    // Tall corner obelisks
+    { x: 200, z: 200, r: 6, h: 70 }, { x: -200, z: 200, r: 6, h: 70 },
+    { x: 200, z: -200, r: 6, h: 70 }, { x: -200, z: -200, r: 6, h: 70 },
+    // Medium canyon-edge monoliths
+    { x: 40, z: 60, r: 8, h: 45 }, { x: -40, z: 60, r: 8, h: 45 },
+    { x: 40, z: -60, r: 8, h: 45 }, { x: -40, z: -60, r: 8, h: 45 },
+    // Central area pillars
     { x: 35, z: 0, r: 4, h: 40 }, { x: -35, z: 0, r: 4, h: 40 },
-    { x: 0, z: 35, r: 4, h: 40 }, { x: 0, z: -35, r: 4, h: 40 }
+    { x: 0, z: 35, r: 4, h: 40 }, { x: 0, z: -35, r: 4, h: 40 },
+    // Outer scattered monoliths
+    { x: 300, z: 0, r: 10, h: 55 }, { x: -300, z: 0, r: 10, h: 55 },
+    { x: 0, z: 300, r: 10, h: 55 }, { x: 0, z: -300, r: 10, h: 55 },
+    { x: 150, z: -250, r: 5, h: 80 }, { x: -150, z: 250, r: 5, h: 80 },
 ];
 
 class ServerTank {
@@ -353,13 +362,13 @@ class ServerTank {
                 if (mag > 0.2) {
                     const normX = this.driverInputs.moveX / mag; const normY = this.driverInputs.moveY / mag;
                     const forwardPropulsion = -normY * 1.75; const sidePropulsion = -normX;
-                    // Zero out vertical velocity before dodge for clean directional snap
-                    this.velocity.y = 0;
+                    // Keep some upward velocity for floaty aerial flip
+                    this.velocity.y = Math.max(this.velocity.y * 0.5, CONFIG.jumpForce * 0.4);
                     this.velocity.x += (dirX * forwardPropulsion + rightX * sidePropulsion) * CONFIG.dodgeForce;
                     this.velocity.z += (dirZ * forwardPropulsion + rightZ * sidePropulsion) * CONFIG.dodgeForce;
                     this.isFlipping = true; this.flipAngle = 0; this.flipAxis.set(normY, 0, -normX).normalize();
                     this.dodgeInvulnTimer = 0.15;
-                } else this.velocity.y += CONFIG.jumpForce * 0.8;
+                } else this.velocity.y += CONFIG.jumpForce * 1.2;
             }
             this.driverInputs.triggerJump = false;
         }
@@ -374,8 +383,14 @@ class ServerTank {
 
         if (!this.isGrounded) {
             this.velocity.y += CONFIG.gravity * 60 * delta;
-            if (this.isEffectivelyBoosting && this.boost > 0) this.velocity.y += 0.04 * 60 * delta;
+            if (this.isEffectivelyBoosting && this.boost > 0) {
+                this.velocity.y += 0.12 * 60 * delta;
+                const airForward = new THREE.Vector3(0, 0, -1).applyAxisAngle(new THREE.Vector3(0, 1, 0), this.hullRotation);
+                this.velocity.x += airForward.x * 0.08 * 60 * delta;
+                this.velocity.z += airForward.z * 0.08 * 60 * delta;
+            }
             this.position.x += this.velocity.x * 60 * delta; this.position.z += this.velocity.z * 60 * delta;
+            this.velocity.x *= Math.pow(0.85, delta); this.velocity.z *= Math.pow(0.85, delta);
             this.surfaceNormal.lerp(new THREE.Vector3(0, 1, 0), 5 * delta).normalize();
         } else {
             this.position.x += this.velocity.x * 60 * delta; this.position.z += this.velocity.z * 60 * delta;
@@ -453,7 +468,7 @@ class ServerTank {
             this.position.y = newGroundY; this.velocity.y = 0; this.isGrounded = true; this.canDoubleJump = false; this.isFlipping = false;
         } else this.isGrounded = false;
 
-        if (wasGrounded && !this.isGrounded && this.lastClimbRate > 0) this.velocity.y = this.lastClimbRate * 1.8;
+        if (wasGrounded && !this.isGrounded && this.lastClimbRate > 0) this.velocity.y = this.lastClimbRate * 3.5;
         if (this.position.y > ceilingY) { this.position.y = ceilingY; if (this.velocity.y > 0) this.velocity.y = -0.5; }
 
         const tiltQuat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), this.surfaceNormal);
@@ -461,7 +476,7 @@ class ServerTank {
         const baseQuat = tiltQuat.multiply(yawQuat);
 
         if (this.isFlipping) {
-            this.flipAngle += 15 * delta; if (this.flipAngle >= Math.PI * 2) { this.isFlipping = false; this.flipAngle = 0; }
+            this.flipAngle += 20 * delta; if (this.flipAngle >= Math.PI * 2) { this.isFlipping = false; this.flipAngle = 0; }
             const flipQuat = new THREE.Quaternion().setFromAxisAngle(this.flipAxis, this.flipAngle);
             this.quaternion.copy(baseQuat).multiply(flipQuat);
         } else this.quaternion.slerp(baseQuat, 12 * delta);

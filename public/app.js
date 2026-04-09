@@ -643,7 +643,7 @@ window.updateGame = function(serverState) {
         if (!scoreEl) {
             scoreEl = document.createElement('div');
             scoreEl.id = 'ctf-scores';
-            scoreEl.style.cssText = 'position:fixed;top:12px;left:50%;transform:translateX(-50%);color:white;font-size:1.6rem;font-family:"Courier New",monospace;z-index:100;text-shadow:0 0 8px rgba(0,0,0,0.8);letter-spacing:0.1em;pointer-events:none;';
+            scoreEl.style.cssText = 'position:fixed;top:50px;left:50%;transform:translateX(-50%);color:white;font-size:1.6rem;font-family:"Courier New",monospace;z-index:100;text-shadow:0 0 8px rgba(0,0,0,0.8);letter-spacing:0.1em;pointer-events:none;';
             const uiLayer = document.getElementById('ui-layer');
             if (uiLayer) uiLayer.appendChild(scoreEl);
         }

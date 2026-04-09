@@ -129,15 +129,27 @@ window.Graphics = {
 
     createTrenchesTexture: function() {
         const c = document.createElement('canvas'); c.width = 512; c.height = 512; const cx = c.getContext('2d');
-        cx.fillStyle = '#7a6347'; cx.fillRect(0,0,512,512);
-        cx.fillStyle = 'rgba(40, 28, 15, 0.35)';
-        for(let x=0; x<512; x+=8) {
-            for(let y=0; y<512; y+=8) {
-                if (Math.random() > 0.65) { cx.fillRect(x + Math.random()*4, y + Math.random()*4, 6, 6); }
+        // Dark purplish-gray asteroid base
+        cx.fillStyle = '#2b2a3e'; cx.fillRect(0,0,512,512);
+        // Rocky variation noise
+        cx.fillStyle = 'rgba(20, 18, 35, 0.5)';
+        for(let x=0; x<512; x+=6) {
+            for(let y=0; y<512; y+=6) {
+                if (Math.random() > 0.55) { cx.fillRect(x + Math.random()*4, y + Math.random()*4, 5, 5); }
             }
         }
-        cx.strokeStyle = 'rgba(55, 40, 22, 0.5)'; cx.lineWidth = 3;
-        for(let i=0; i<6; i++) { cx.beginPath(); cx.moveTo(0, Math.random()*512); cx.lineTo(512, Math.random()*512); cx.stroke(); }
+        // Subtle cyan/teal glowing vein lines
+        cx.strokeStyle = 'rgba(109, 203, 195, 0.12)'; cx.lineWidth = 2;
+        for(let i=0; i<8; i++) {
+            cx.beginPath(); cx.moveTo(Math.random()*512, Math.random()*512);
+            cx.lineTo(Math.random()*512, Math.random()*512); cx.stroke();
+        }
+        // Small crater-like marks
+        cx.fillStyle = 'rgba(15, 12, 28, 0.4)';
+        for(let i=0; i<20; i++) {
+            const rx = Math.random()*512; const ry = Math.random()*512; const rr = 4 + Math.random()*10;
+            cx.beginPath(); cx.arc(rx, ry, rr, 0, Math.PI*2); cx.fill();
+        }
         const tex = new THREE.CanvasTexture(c); tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.repeat.set(25, 25);
         return tex;
     },
@@ -170,6 +182,9 @@ rebuildMapGeometry: function(mapName) {
         if (activeMapName === 'shattered_city') {
             this.scene.background = new THREE.Color(0x1a1525);
             this.scene.fog = new THREE.FogExp2(0x2a1a3a, 0.007);
+        } else if (activeMapName === 'trenches') {
+            this.scene.background = new THREE.Color(0x1f1c30);
+            this.scene.fog = new THREE.FogExp2(0x1f1c30, 0.002);
         } else {
             this.scene.background = new THREE.Color(0x1f1c30);
             this.scene.fog = null;
@@ -209,13 +224,15 @@ rebuildMapGeometry: function(mapName) {
 
         // Standard Materials
         const wallMat = new THREE.MeshStandardMaterial({ color: 0x1a1a24, roughness: 0.9, metalness: 0.5 });
+        const tallMonolithMat = new THREE.MeshStandardMaterial({ color: 0x1a1a2e, emissive: 0x6dcbc3, emissiveIntensity: 0.15, roughness: 0.3, metalness: 0.9 });
         const platMat = new THREE.MeshStandardMaterial({ color: 0x2b2b36, roughness: 0.4, metalness: 0.8 });
         const stormMat = new THREE.MeshBasicMaterial({ color: 0x00ffcc, transparent: true, opacity: 0.25, side: THREE.DoubleSide, blending: THREE.AdditiveBlending });
 
         // 1. Render Obstacles/Pillars
         if (props.obstacles) {
             props.obstacles.forEach(obs => {
-                const mesh = new THREE.Mesh(new THREE.CylinderGeometry(obs.r, obs.r, obs.h, 12), wallMat);
+                const mat = obs.h > 50 ? tallMonolithMat : wallMat;
+                const mesh = new THREE.Mesh(new THREE.CylinderGeometry(obs.r, obs.r, obs.h, 12), mat);
                 mesh.position.set(obs.x, obs.h / 2, obs.z);
                 mesh.userData = { type: 'obstacle' };
                 this.matchGroup.add(mesh);
