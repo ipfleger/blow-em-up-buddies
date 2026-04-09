@@ -584,6 +584,12 @@ button:active { transform: scale(0.95); }
     align-items: center;
 }
 #pause-overlay.hidden { display: none !important; }
+#btn-pause {
+    position: fixed;
+    top: 14px;
+    left: 14px;
+    z-index: 110;
+}
 
 /* ============================================================
    TUTORIAL OVERLAY
