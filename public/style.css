@@ -384,3 +384,319 @@ button:active { transform: scale(0.95); }
     border-radius: 2px;
     background: rgba(109, 203, 195, 0.25);
 }
+
+/* ============================================================
+   MATCH TIMER
+   ============================================================ */
+#match-timer {
+    background: rgba(15, 12, 27, 0.75);
+    border: 1px solid rgba(109, 203, 195, 0.35);
+    border-radius: 20px;
+    padding: 4px 14px;
+    color: white;
+    font-size: 1rem;
+    font-weight: bold;
+    letter-spacing: 2px;
+    backdrop-filter: blur(4px);
+}
+#match-timer.timer-low { color: var(--neon-pink); border-color: var(--neon-pink); }
+
+/* ============================================================
+   KILL FEED
+   ============================================================ */
+#kill-feed {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    align-items: flex-end;
+}
+.kill-feed-entry {
+    background: rgba(15, 12, 27, 0.75);
+    border: 1px solid rgba(109, 203, 195, 0.2);
+    border-radius: 4px;
+    padding: 3px 8px;
+    font-size: 0.75rem;
+    color: white;
+    white-space: nowrap;
+    animation: fadeInKill 0.2s ease;
+    transition: opacity 0.5s;
+}
+@keyframes fadeInKill {
+    from { opacity: 0; transform: translateX(10px); }
+    to { opacity: 1; transform: translateX(0); }
+}
+
+/* ============================================================
+   ROLE CALLOUT
+   ============================================================ */
+#role-callout {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 2.5rem;
+    font-weight: bold;
+    color: var(--neon-cyan);
+    text-shadow: 0 0 20px var(--neon-cyan);
+    text-align: center;
+    pointer-events: none;
+    z-index: 300;
+    text-transform: uppercase;
+    letter-spacing: 4px;
+    animation: roleCalloutFade 2s ease forwards;
+}
+@keyframes roleCalloutFade {
+    0% { opacity: 0; transform: translate(-50%, -50%) scale(0.7); }
+    20% { opacity: 1; transform: translate(-50%, -50%) scale(1.05); }
+    70% { opacity: 1; transform: translate(-50%, -50%) scale(1.0); }
+    100% { opacity: 0; transform: translate(-50%, -50%) scale(0.9); }
+}
+
+/* ============================================================
+   RESPAWN OVERLAY
+   ============================================================ */
+#respawn-overlay {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(15, 12, 27, 0.85);
+    border: 2px solid var(--neon-pink);
+    border-radius: 12px;
+    padding: 20px 40px;
+    color: white;
+    font-size: 1.5rem;
+    font-weight: bold;
+    text-align: center;
+    pointer-events: none;
+    z-index: 300;
+    letter-spacing: 2px;
+}
+
+/* ============================================================
+   SCOREBOARD OVERLAY
+   ============================================================ */
+#scoreboard-overlay {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(15, 12, 27, 0.92);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 20px 28px;
+    min-width: 320px;
+    z-index: 400;
+    backdrop-filter: blur(10px);
+    pointer-events: none;
+}
+#scoreboard-overlay h3 {
+    color: var(--neon-cyan);
+    text-align: center;
+    margin-bottom: 12px;
+    font-size: 1rem;
+    letter-spacing: 2px;
+}
+.scoreboard-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+}
+.scoreboard-table th {
+    color: var(--text-dim);
+    text-align: left;
+    padding: 4px 8px;
+    border-bottom: 1px solid var(--border-color);
+}
+.scoreboard-table td {
+    padding: 4px 8px;
+    color: white;
+}
+.scoreboard-table tr:nth-child(even) td { background: rgba(255,255,255,0.04); }
+.scoreboard-myrow td { color: var(--neon-green); }
+
+/* ============================================================
+   END-OF-MATCH OVERLAY
+   ============================================================ */
+#end-screen {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.85);
+    z-index: 500;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    backdrop-filter: blur(8px);
+}
+.end-card {
+    background: rgba(15, 12, 27, 0.95);
+    border: 2px solid var(--neon-cyan);
+    border-radius: 16px;
+    padding: 30px 36px;
+    min-width: 300px;
+    max-width: 90vw;
+    text-align: center;
+    box-shadow: 0 0 40px rgba(109, 203, 195, 0.3);
+}
+.end-title {
+    font-size: 2rem;
+    font-weight: bold;
+    color: var(--neon-cyan);
+    text-shadow: 0 0 15px var(--neon-cyan);
+    margin-bottom: 6px;
+}
+.end-subtitle {
+    color: var(--text-dim);
+    font-size: 0.9rem;
+    margin-bottom: 20px;
+    letter-spacing: 2px;
+}
+.end-stats {
+    margin-bottom: 20px;
+    font-size: 0.85rem;
+}
+.end-stats table {
+    width: 100%;
+    border-collapse: collapse;
+}
+.end-stats th {
+    color: var(--text-dim);
+    padding: 4px 8px;
+    text-align: left;
+    border-bottom: 1px solid var(--border-color);
+}
+.end-stats td {
+    padding: 4px 8px;
+    color: white;
+}
+.end-stats .highlight td { color: var(--neon-gold); }
+
+/* ============================================================
+   TUTORIAL OVERLAY
+   ============================================================ */
+#tutorial-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.88);
+    z-index: 600;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    backdrop-filter: blur(6px);
+}
+.tutorial-card {
+    background: rgba(15, 12, 27, 0.95);
+    border: 2px solid var(--neon-cyan);
+    border-radius: 16px;
+    padding: 30px 32px;
+    max-width: 340px;
+    width: 90vw;
+    text-align: center;
+    box-shadow: 0 0 30px rgba(109, 203, 195, 0.25);
+}
+.tutorial-icon { font-size: 2.5rem; margin-bottom: 12px; }
+.tutorial-card h2 {
+    color: var(--neon-cyan);
+    font-size: 1.4rem;
+    margin-bottom: 12px;
+    letter-spacing: 3px;
+}
+.tutorial-card p {
+    color: rgba(255,255,255,0.8);
+    line-height: 1.6;
+    font-size: 0.9rem;
+}
+.tutorial-card strong { color: var(--neon-green); }
+.tutorial-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 24px;
+}
+.tutorial-dots { display: flex; gap: 6px; }
+.tutorial-dots .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: rgba(255,255,255,0.2);
+    transition: background 0.2s;
+}
+.tutorial-dots .dot.active { background: var(--neon-cyan); }
+.tutorial-panel { display: block; }
+.tutorial-panel.hidden { display: none !important; }
+
+/* ============================================================
+   PORTRAIT LOCK
+   ============================================================ */
+#portrait-lock {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.95);
+    z-index: 9999;
+    justify-content: center;
+    align-items: center;
+    flex-direction: column;
+    text-align: center;
+    color: white;
+}
+@media screen and (orientation: portrait) {
+    #portrait-lock { display: flex; }
+}
+
+/* ============================================================
+   SAFE AREA & TOUCH IMPROVEMENTS
+   ============================================================ */
+#ui-layer {
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+button { touch-action: manipulation; }
+.action-button { touch-action: manipulation; }
+
+/* ============================================================
+   EXTRA SETTINGS CONTROLS
+   ============================================================ */
+.settings-select {
+    width: 100%;
+    padding: 8px 10px;
+    background: rgba(0,0,0,0.6);
+    border: 2px solid var(--neon-cyan);
+    color: white;
+    font-size: 0.9rem;
+    border-radius: 6px;
+    outline: none;
+    font-family: var(--font-stack);
+    cursor: pointer;
+}
+.settings-select option { background: #1a1a2e; color: white; }
+.settings-row-checkbox {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+}
+.settings-row-checkbox label {
+    margin-bottom: 0;
+    flex: 1;
+}
+.settings-checkbox {
+    width: 20px;
+    height: 20px;
+    accent-color: var(--neon-cyan);
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+/* ============================================================
+   INVULNERABILITY SHIELD FLASH
+   ============================================================ */
+#invuln-flash {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 15;
+    background: rgba(109, 203, 195, 0);
+    transition: background 0.15s;
+}
+#invuln-flash.active {
+    background: rgba(109, 203, 195, 0.18);
+}

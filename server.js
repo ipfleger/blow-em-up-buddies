@@ -53,9 +53,13 @@ function applyDefaultColors(lobby) {
 
 io.on('connection', (socket) => {
     let currentRoom = null;
+    let inputCount = 0;
+    let inputResetTimer = setInterval(() => { inputCount = 0; }, 1000);
 
     socket.on('host-game', (data) => {
-        const playerName = typeof data === 'string' ? data : data.name;
+        const rawName = typeof data === 'string' ? data : data.name;
+        // Sanitize gamertag: only allow alphanumeric, spaces, underscores, hyphens; limit to 20 chars
+        const playerName = String(rawName || '').replace(/[^A-Za-z0-9 _\-]/g, '').trim().substring(0, 20).toUpperCase();
         const maxTanks = data.maxTanks || 6;
         const mapName = data.map || 'bowl';
         const modeName = data.mode || 'FFA';
@@ -98,7 +102,8 @@ io.on('connection', (socket) => {
 
     socket.on('join-game', (data) => {
         const code = data.code;
-        const name = data.name;
+        // Sanitize name: only allow alphanumeric, spaces, underscores, hyphens; limit to 20 chars
+        const name = String(data.name || '').replace(/[^A-Za-z0-9 _\-]/g, '').trim().substring(0, 20).toUpperCase();
         if (activeRooms.has(code) && activeLobbies[code]) {
             currentRoom = code;
             socket.join(currentRoom);
@@ -247,11 +252,14 @@ io.on('connection', (socket) => {
 
     // Handle WebSocket Inputs Instead of WebRTC
     socket.on('input', (input) => {
+        inputCount++;
+        if (inputCount > 120) { socket.disconnect(true); return; }
         let match = gameEngine.getMatch(currentRoom);
         if (match) match.applyInput(socket.id, input);
     });
 
     socket.on('disconnect', () => {
+        clearInterval(inputResetTimer);
         if (currentRoom) {
             if (activeLobbies[currentRoom]) {
                 for (let s in activeLobbies[currentRoom].slots) {

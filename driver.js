@@ -39,9 +39,10 @@ class ServerTank {
         this.respawn();
     }
 
-    die() {
+    die(killerId) {
         this.isDead = true;
         this.respawnTimer = 3.0;
+        this.lastKiller = killerId || null;
         this.position.set(0, -1000, 0);
         this.velocity.set(0, 0, 0);
         this.currentSpeed = 0;
@@ -64,6 +65,7 @@ class ServerTank {
         this.rapidCooldown = 0;
 	    this.jumpCooldown = 0;
         this.dodgeInvulnTimer = 0;
+        this.respawnInvuln = 1.5;
         this.driverInputs.triggerJump = false;
         this.driverInputs.holdingJump = false;
         this.wasBoostingLastTick = false;
@@ -88,6 +90,7 @@ class ServerTank {
         if (this.bombCooldown > 0) this.bombCooldown -= delta;
         if (this.rapidCooldown > 0) this.rapidCooldown -= delta;
         if (this.dodgeInvulnTimer > 0) this.dodgeInvulnTimer -= delta;
+        if (this.respawnInvuln > 0) this.respawnInvuln -= delta;
 
         this.fireConcussive = false;
         this.fireRapid = false;
@@ -168,31 +171,121 @@ class ServerTank {
         // --- BOT DRIVING LOGIC ---
         if (!this.driverId) {
             this.driverRethinkTimer = (this.driverRethinkTimer || 0) - delta;
-            if (this.driverRethinkTimer <= 0) {
-                this.driverRethinkTimer = 0.5 + Math.random();
-                let bestDist = Infinity; this.targetRam = null;
-                for (let oId in allTanks) {
-                    if (oId === this.id || allTanks[oId].isDead) continue;
-                    if (mode === '3v3' && this.getTeam(this.id) === this.getTeam(oId)) continue;
-                    let dist = this.position.distanceTo(allTanks[oId].position);
-                    if (dist < bestDist) { bestDist = dist; this.targetRam = allTanks[oId]; }
+
+            // Health retreat: if below 30 health, flee from nearest enemy
+            if (this.health < 30) {
+                if (this.driverRethinkTimer <= 0) {
+                    this.driverRethinkTimer = 0.5 + Math.random();
+                    let nearestEnemy = null; let bestDist = Infinity;
+                    for (let oId in allTanks) {
+                        if (oId === this.id || allTanks[oId].isDead) continue;
+                        if (mode === '3v3' && this.getTeam(this.id) === this.getTeam(oId)) continue;
+                        let dist = this.position.distanceTo(allTanks[oId].position);
+                        if (dist < bestDist) { bestDist = dist; nearestEnemy = allTanks[oId]; }
+                    }
+                    this.retreatFrom = nearestEnemy;
                 }
+                if (this.retreatFrom && !this.retreatFrom.isDead) {
+                    let dx = this.position.x - this.retreatFrom.position.x;
+                    let dz = this.position.z - this.retreatFrom.position.z;
+                    let fleeRot = Math.atan2(-dx, -dz);
+                    let diff = fleeRot - this.hullRotation;
+                    while(diff < -Math.PI) diff += Math.PI*2; while(diff > Math.PI) diff -= Math.PI*2;
+                    if (diff > 0.2) this.driverInputs.moveX = -1; else if (diff < -0.2) this.driverInputs.moveX = 1; else this.driverInputs.moveX = 0;
+                    this.driverInputs.moveY = -1;
+                    this.driverInputs.isBoosting = false;
+                } else { this.driverInputs.moveX = 0; this.driverInputs.moveY = 0; this.driverInputs.isBoosting = false; }
+            } else {
+                // Normal bot driving
+                this.patrolTimer = (this.patrolTimer || 5) - delta;
+                if (this.patrolTimer <= 0) {
+                    this.patrolTimer = 5;
+                    this.patrolTarget = { isDead: false, position: new THREE.Vector3(
+                        this.position.x + (Math.random() - 0.5) * 200,
+                        0,
+                        this.position.z + (Math.random() - 0.5) * 200
+                    )};
+                }
+
+                if (this.driverRethinkTimer <= 0) {
+                    this.driverRethinkTimer = 0.5 + Math.random();
+
+                    // CTF awareness
+                    let ctfTarget = null;
+                    if (mode === 'CTF' && this._ctfFlags) {
+                        const myTeam = this.getTeam(this.id);
+                        const enemyFlag = this._ctfFlags.find(f => f.team !== myTeam);
+                        const ownFlag = this._ctfFlags.find(f => f.team === myTeam);
+                        const iCarryFlag = enemyFlag && enemyFlag.carrierId === this.id;
+                        const enemyCarriesOwnFlag = ownFlag && ownFlag.carrierId && ownFlag.carrierId !== this.id;
+
+                        if (iCarryFlag && ownFlag) {
+                            // Head to own base to score
+                            ctfTarget = { isDead: false, position: new THREE.Vector3(ownFlag.homeX, ownFlag.homeY, ownFlag.homeZ) };
+                        } else if (enemyCarriesOwnFlag) {
+                            // Chase the flag carrier
+                            ctfTarget = allTanks[ownFlag.carrierId];
+                        } else if (enemyFlag && !enemyFlag.carrierId) {
+                            // Grab enemy flag
+                            ctfTarget = { isDead: false, position: new THREE.Vector3(enemyFlag.x, enemyFlag.y, enemyFlag.z) };
+                        }
+                    }
+
+                    if (ctfTarget) {
+                        this.targetRam = ctfTarget;
+                    } else {
+                        // Standard: find nearest enemy
+                        let bestDist = Infinity; this.targetRam = null;
+                        for (let oId in allTanks) {
+                            if (oId === this.id || allTanks[oId].isDead) continue;
+                            if (mode === '3v3' && this.getTeam(this.id) === this.getTeam(oId)) continue;
+                            let dist = this.position.distanceTo(allTanks[oId].position);
+                            if (dist < bestDist) { bestDist = dist; this.targetRam = allTanks[oId]; }
+                        }
+                        // Fall back to patrol if no nearby enemy
+                        if (!this.targetRam) this.targetRam = this.patrolTarget;
+                    }
+                }
+
+                if (this.targetRam && !this.targetRam.isDead) {
+                    let dx = this.targetRam.position.x - this.position.x; let dz = this.targetRam.position.z - this.position.z;
+                    let targetRot = Math.atan2(-dx, -dz);
+                    let diff = targetRot - this.hullRotation;
+                    while(diff < -Math.PI) diff += Math.PI*2; while(diff > Math.PI) diff -= Math.PI*2;
+
+                    // Obstacle avoidance: check forward direction for pillars
+                    let fwdX = -Math.sin(this.hullRotation); let fwdZ = -Math.cos(this.hullRotation);
+                    let avoidance = 0;
+                    let activeObstacles = (mapProps.obstacles && mapProps.obstacles.length > 0) ? mapProps.obstacles : MONOLITHS;
+                    for (let obs of activeObstacles) {
+                        if (this.position.y > obs.h + 2) continue;
+                        let odx = obs.x - this.position.x; let odz = obs.z - this.position.z;
+                        let dot = fwdX * odx + fwdZ * odz;
+                        if (dot > 0 && dot < 15) {
+                            let cross = fwdX * odz - fwdZ * odx;
+                            let dist = Math.hypot(odx, odz);
+                            if (dist < obs.r + 8) { avoidance = cross > 0 ? -1 : 1; break; }
+                        }
+                    }
+
+                    if (avoidance !== 0) {
+                        this.driverInputs.moveX = avoidance;
+                    } else if (diff > 0.2) {
+                        this.driverInputs.moveX = -1;
+                    } else if (diff < -0.2) {
+                        this.driverInputs.moveX = 1;
+                    } else {
+                        this.driverInputs.moveX = 0;
+                    }
+                    this.driverInputs.moveY = -1;
+
+                    let dist = this.position.distanceTo(this.targetRam.position);
+                    if (Math.abs(diff) < 0.3 && dist < 80 && this.targetRam !== this.patrolTarget) this.driverInputs.isBoosting = true;
+                    else this.driverInputs.isBoosting = false;
+
+                    if (Math.random() < 0.02) this.driverInputs.triggerJump = true;
+                } else { this.driverInputs.moveX = 0; this.driverInputs.moveY = 0; this.driverInputs.isBoosting = false; }
             }
-
-            if (this.targetRam && !this.targetRam.isDead) {
-                let dx = this.targetRam.position.x - this.position.x; let dz = this.targetRam.position.z - this.position.z;
-                let targetRot = Math.atan2(-dx, -dz);
-                let diff = targetRot - this.hullRotation;
-                while(diff < -Math.PI) diff += Math.PI*2; while(diff > Math.PI) diff -= Math.PI*2;
-
-                if (diff > 0.2) this.driverInputs.moveX = -1; else if (diff < -0.2) this.driverInputs.moveX = 1; else this.driverInputs.moveX = 0;
-                this.driverInputs.moveY = -1;
-
-                if (Math.abs(diff) < 0.3 && this.position.distanceTo(this.targetRam.position) < 80) this.driverInputs.isBoosting = true;
-                else this.driverInputs.isBoosting = false;
-
-                if (Math.random() < 0.02) this.driverInputs.triggerJump = true;
-            } else { this.driverInputs.moveX = 0; this.driverInputs.moveY = 0; this.driverInputs.isBoosting = false; }
         }
 
         let oldX = this.position.x; let oldZ = this.position.z;
@@ -394,7 +487,9 @@ class ServerTank {
             bombCooldown: trunc1(this.bombCooldown), isDead: this.isDead,
             isBoosting: this.isEffectivelyBoosting && Math.abs(this.driverInputs.moveY) > 0.1,
             gunnerAbility: this.gunnerAbility,
-            speed: trunc1(this.currentSpeed), config: this.config
+            speed: trunc1(this.currentSpeed), config: this.config,
+            respawnInvuln: this.respawnInvuln > 0,
+            lastKiller: this.isDead ? (this.lastKiller || null) : null
         };
     }
 }

@@ -12,6 +12,18 @@ window.Graphics = {
     activeParticles: [],
     sparkGeo: new THREE.BoxGeometry(0.4, 0.4, 0.4),
     shatterGeo: new THREE.BoxGeometry(0.8, 0.8, 0.8),
+    particleQuality: 1.0,
+
+    // --- MATERIAL POOL ---
+    _matPool: {},
+    _getMaterial: function(color) {
+        const key = typeof color === 'number' ? color : parseInt(String(color).replace(/^#/, ''), 16);
+        if (!isFinite(key)) return new THREE.MeshBasicMaterial({ color: 0xffffff });
+        if (!this._matPool[key]) {
+            this._matPool[key] = new THREE.MeshBasicMaterial({ color: key });
+        }
+        return this._matPool[key];
+    },
 
     init: function() {
         this.scene = new THREE.Scene();
@@ -245,13 +257,15 @@ rebuildMapGeometry: function(mapName) {
     // ==========================================
 
     emitSparks: function(tankMesh, rawRot, config, speed) {
+        const quality = this.particleQuality || 1.0;
+        if (Math.random() > quality) return;
         const forward = new THREE.Vector3(0, 0, -1).applyAxisAngle(new THREE.Vector3(0,1,0), rawRot);
         const isReverse = speed < 0;
         const offsetMult = isReverse ? 2.5 : -2.5;
         const exhaustPos = tankMesh.position.clone().add(forward.clone().multiplyScalar(offsetMult));
         exhaustPos.y += 0.8;
 
-        const sparkMat = new THREE.MeshBasicMaterial({ color: parseInt(config.c1.replace('#', '0x')) });
+        const sparkMat = this._getMaterial(parseInt(config.c1.replace('#', '0x')));
 
         for(let i=0; i<2; i++) {
             const spark = new THREE.Mesh(this.sparkGeo, sparkMat);
@@ -260,13 +274,15 @@ rebuildMapGeometry: function(mapName) {
 
             const scatter = new THREE.Vector3((Math.random()-0.5)*3, Math.random()*2, (Math.random()-0.5)*3);
             const vel = forward.clone().multiplyScalar(isReverse ? 3 : -3).add(scatter);
-            this.activeParticles.push({ mesh: spark, vel: vel, life: 0.5 });
+            this.activeParticles.push({ mesh: spark, vel: vel, life: 0.5, pooled: true });
         }
     },
 
     createShatterParticles: function(position, count = 40, pColor = 0xff3366) {
-        for(let i=0; i<count; i++) {
-            const pMat = new THREE.MeshBasicMaterial({ color: pColor });
+        const quality = this.particleQuality || 1.0;
+        const actualCount = Math.max(1, Math.floor(count * quality));
+        const pMat = this._getMaterial(pColor);
+        for(let i=0; i<actualCount; i++) {
             const p = new THREE.Mesh(this.shatterGeo, pMat);
             p.position.copy(position);
             this.matchGroup.add(p);
@@ -274,7 +290,8 @@ rebuildMapGeometry: function(mapName) {
             this.activeParticles.push({
                 mesh: p,
                 vel: new THREE.Vector3((Math.random() - 0.5)*8, (Math.random()*6), (Math.random() - 0.5)*8),
-                life: 1.5
+                life: 1.5,
+                pooled: true
             });
         }
     },
@@ -291,7 +308,8 @@ rebuildMapGeometry: function(mapName) {
             if (pt.life > 0) {
                 pt.mesh.scale.setScalar(Math.max(0, pt.life * 2));
             } else {
-                if (pt.mesh.material) pt.mesh.material.dispose();
+                // Don't dispose pooled materials (they are reused from _matPool)
+                if (!pt.pooled && pt.mesh.material) pt.mesh.material.dispose();
                 this.matchGroup.remove(pt.mesh);
                 this.activeParticles.splice(i, 1);
             }
