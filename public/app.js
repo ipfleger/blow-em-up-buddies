@@ -419,13 +419,12 @@ window.updateGame = function(serverState) {
     // --- CTF FLAGS ---
     if (serverState.flags) {
         if (!window.ctfFlagMeshes) window.ctfFlagMeshes = {};
-        const flagGeo = new THREE.SphereGeometry(2, 16, 12);
         serverState.flags.forEach(flag => {
             const key = `team${flag.team}`;
             if (!window.ctfFlagMeshes[key]) {
                 const color = flag.team === 1 ? 0xb4d455 : 0xff3366;
                 const mat = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 1.5, transparent: true, opacity: 0.9 });
-                const mesh = new THREE.Mesh(flagGeo, mat);
+                const mesh = new THREE.Mesh(new THREE.SphereGeometry(2, 16, 12), mat);
                 mesh.userData = { type: 'ctfFlag', team: flag.team };
                 window.Graphics.matchGroup.add(mesh);
                 window.ctfFlagMeshes[key] = mesh;

@@ -359,7 +359,8 @@ class Match {
                         // Check if carrier has returned to their own flag's home base
                         const carrierTeam = this.getTeam(flag.carrierId);
                         const ownFlag = this.flags.find(f => f.team === carrierTeam);
-                        if (ownFlag && ownFlag.carrierId === null) {
+                        const ownFlagAtHome = ownFlag && Math.hypot(ownFlag.x - ownFlag.homeX, ownFlag.z - ownFlag.homeZ) < 1;
+                        if (ownFlag && ownFlag.carrierId === null && ownFlagAtHome) {
                             const dist = Math.hypot(carrier.position.x - ownFlag.homeX, carrier.position.z - ownFlag.homeZ);
                             if (dist < 12) {
                                 this.scores[carrierTeam] = (this.scores[carrierTeam] || 0) + 1;
