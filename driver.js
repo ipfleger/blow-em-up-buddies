@@ -362,8 +362,8 @@ class ServerTank {
                 if (mag > 0.2) {
                     const normX = this.driverInputs.moveX / mag; const normY = this.driverInputs.moveY / mag;
                     const forwardPropulsion = -normY * 1.75; const sidePropulsion = -normX;
-                    // Keep some upward velocity for floaty aerial flip
-                    this.velocity.y = Math.max(this.velocity.y * 0.5, CONFIG.jumpForce * 0.4);
+                    // Keep some upward velocity for floaty aerial flip; always ensure minimum upward boost
+                    this.velocity.y = this.velocity.y > 0 ? Math.max(this.velocity.y * 0.5, CONFIG.jumpForce * 0.4) : CONFIG.jumpForce * 0.4;
                     this.velocity.x += (dirX * forwardPropulsion + rightX * sidePropulsion) * CONFIG.dodgeForce;
                     this.velocity.z += (dirZ * forwardPropulsion + rightZ * sidePropulsion) * CONFIG.dodgeForce;
                     this.isFlipping = true; this.flipAngle = 0; this.flipAxis.set(normY, 0, -normX).normalize();
@@ -390,7 +390,7 @@ class ServerTank {
                 this.velocity.z += airForward.z * 0.08 * 60 * delta;
             }
             this.position.x += this.velocity.x * 60 * delta; this.position.z += this.velocity.z * 60 * delta;
-            this.velocity.x *= Math.pow(0.85, delta); this.velocity.z *= Math.pow(0.85, delta);
+            this.velocity.x *= Math.pow(0.85, 60 * delta); this.velocity.z *= Math.pow(0.85, 60 * delta);
             this.surfaceNormal.lerp(new THREE.Vector3(0, 1, 0), 5 * delta).normalize();
         } else {
             this.position.x += this.velocity.x * 60 * delta; this.position.z += this.velocity.z * 60 * delta;
