@@ -19,7 +19,13 @@ app.get('/map-builder.js', (req, res) => res.sendFile(path.join(__dirname, 'map-
 const activeRooms = new Map();
 const activeLobbies = {};
 
-function genCode() { return Math.random().toString(36).substring(2, 6).toUpperCase(); }
+function genCode() {
+    let code;
+    do {
+        code = Math.random().toString(36).substring(2, 6).toUpperCase();
+    } while (activeLobbies[code] || activeRooms.has(code));
+    return code;
+}
 function broadcastLobby(roomCode) { io.to(roomCode).emit('lobby-update', activeLobbies[roomCode]); }
 
 let availableIcons = [];
@@ -61,12 +67,13 @@ io.on('connection', (socket) => {
         // Sanitize gamertag: only allow alphanumeric, spaces, underscores, hyphens; limit to 20 chars
         const playerName = String(rawName || '').replace(/[^A-Za-z0-9 _\-]/g, '').trim().substring(0, 20).toUpperCase();
         const maxTanks = data.maxTanks || 6;
-        const mapName = data.map || 'bowl';
+        const mapName = data.map || 'trenches';
         const modeName = data.mode || 'FFA';
 
         currentRoom = genCode();
         socket.join(currentRoom);
         activeRooms.set(currentRoom, new Map());
+        activeRooms.get(currentRoom).set(socket.id, true);
 
         const assignedIcons = getRandomIcons(maxTanks);
 
@@ -107,6 +114,7 @@ io.on('connection', (socket) => {
         if (activeRooms.has(code) && activeLobbies[code]) {
             currentRoom = code;
             socket.join(currentRoom);
+            activeRooms.get(currentRoom).set(socket.id, true);
             activeLobbies[code].names[socket.id] = name;
             socket.emit('room-joined', { code: currentRoom, isHost: false });
             broadcastLobby(currentRoom);
@@ -190,7 +198,12 @@ io.on('connection', (socket) => {
 
     socket.on('update-garage', (tankId, role, state) => {
         if(!currentRoom || !activeLobbies[currentRoom]) return;
-        let conf = activeLobbies[currentRoom].tankConfigs[tankId];
+        let lobby = activeLobbies[currentRoom];
+        // Verify this socket is actually seated in this tank
+        let seated = lobby.slots[`${tankId}_driver`] === socket.id || lobby.slots[`${tankId}_gunner`] === socket.id;
+        if (!seated) return;
+        let conf = lobby.tankConfigs[tankId];
+        if (!conf) return;
         if (role === 'driver') { conf.chassis = state.chassis; conf.treads = state.treads; conf.c1 = state.c1; }
         else { conf.turret = state.turret; conf.barrel = state.barrel; conf.c2 = state.c2; }
         broadcastLobby(currentRoom);
@@ -266,6 +279,22 @@ io.on('connection', (socket) => {
                     if (activeLobbies[currentRoom].slots[s] === socket.id) activeLobbies[currentRoom].slots[s] = null;
                 }
                 activeLobbies[currentRoom].spectators = activeLobbies[currentRoom].spectators.filter(id => id !== socket.id);
+
+                // Host transfer: if the disconnecting socket was the host, transfer to next player
+                if (activeLobbies[currentRoom].host === socket.id) {
+                    const remaining = activeRooms.get(currentRoom);
+                    if (remaining) {
+                        // Find next player that isn't this socket
+                        for (let [pid] of remaining) {
+                            if (pid !== socket.id) {
+                                activeLobbies[currentRoom].host = pid;
+                                io.to(pid).emit('host-transferred', pid);
+                                break;
+                            }
+                        }
+                    }
+                }
+
                 broadcastLobby(currentRoom);
             }
             if (activeRooms.has(currentRoom)) {
@@ -299,4 +328,9 @@ setInterval(() => {
 }, 1000 / 30);
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+server.listen(PORT, () => {
+    console.log(`🚀 Server running on port ${PORT}`);
+    // Pre-build the trenches terrain height cache at startup to avoid blocking the event loop
+    // on first match start.
+    maps.getTerrainHeight(0, 0, 'trenches');
+});

@@ -19,7 +19,7 @@ class ServerTank {
     constructor(id, config, mapName, team, slotIndex) {
         this.id = id;
         this.config = config;
-        this.mapName = mapName || 'bowl';
+        this.mapName = mapName || 'trenches';
         this.team = team || 1;
         this.slotIndex = slotIndex || 0;
 
@@ -57,8 +57,7 @@ class ServerTank {
         this.currentSpeed = 0;
         this.hullRotation = this.team === 1 ? -Math.PI/2 : Math.PI/2;
         this.turretYaw = this.hullRotation;
-        this.turretPitch = 0;
-        this.boost = CONFIG.maxBoost;
+        this.turretPitch = 0;        this.boost = CONFIG.maxBoost;
         this.health = 100;
         this.isGrounded = false;
         this.bombCooldown = 0;
@@ -70,11 +69,6 @@ class ServerTank {
         this.driverInputs.holdingJump = false;
         this.wasBoostingLastTick = false;
         this.actualTurretYOffset = 12.0;
-    }
-
-    getTeam(tankId) {
-        let num = parseInt(tankId.replace('tank', ''));
-        return num <= 3 ? 1 : 2;
     }
 
     update(delta, allTanks, mode, mapShutters = []) {
@@ -134,7 +128,7 @@ class ServerTank {
             let bestTarget = null; let minDist = Infinity;
             for (let otherId in allTanks) {
                 if (otherId === this.id || allTanks[otherId].isDead) continue;
-                if (mode === '3v3' && this.getTeam(this.id) === this.getTeam(otherId)) continue;
+                if (mode === '3v3' && this.team === allTanks[otherId].team) continue;
                 let dist = this.position.distanceTo(allTanks[otherId].position);
                 if (dist < minDist && dist < 150) { minDist = dist; bestTarget = allTanks[otherId]; }
             }
@@ -179,7 +173,7 @@ class ServerTank {
                     let nearestEnemy = null; let bestDist = Infinity;
                     for (let oId in allTanks) {
                         if (oId === this.id || allTanks[oId].isDead) continue;
-                        if (mode === '3v3' && this.getTeam(this.id) === this.getTeam(oId)) continue;
+                        if (mode === '3v3' && this.team === allTanks[oId].team) continue;
                         let dist = this.position.distanceTo(allTanks[oId].position);
                         if (dist < bestDist) { bestDist = dist; nearestEnemy = allTanks[oId]; }
                     }
@@ -213,7 +207,7 @@ class ServerTank {
                     // CTF awareness
                     let ctfTarget = null;
                     if (mode === 'CTF' && this._ctfFlags) {
-                        const myTeam = this.getTeam(this.id);
+                        const myTeam = this.team;
                         const enemyFlag = this._ctfFlags.find(f => f.team !== myTeam);
                         const ownFlag = this._ctfFlags.find(f => f.team === myTeam);
                         const iCarryFlag = enemyFlag && enemyFlag.carrierId === this.id;
@@ -238,7 +232,7 @@ class ServerTank {
                         let bestDist = Infinity; this.targetRam = null;
                         for (let oId in allTanks) {
                             if (oId === this.id || allTanks[oId].isDead) continue;
-                            if (mode === '3v3' && this.getTeam(this.id) === this.getTeam(oId)) continue;
+                            if (mode === '3v3' && this.team === allTanks[oId].team) continue;
                             let dist = this.position.distanceTo(allTanks[oId].position);
                             if (dist < bestDist) { bestDist = dist; this.targetRam = allTanks[oId]; }
                         }
@@ -487,7 +481,7 @@ class ServerTank {
             bombCooldown: trunc1(this.bombCooldown), isDead: this.isDead,
             isBoosting: this.isEffectivelyBoosting && Math.abs(this.driverInputs.moveY) > 0.1,
             gunnerAbility: this.gunnerAbility,
-            speed: trunc1(this.currentSpeed), config: this.config,
+            speed: trunc1(this.currentSpeed),
             respawnInvuln: this.respawnInvuln > 0,
             lastKiller: this.isDead ? (this.lastKiller || null) : null
         };

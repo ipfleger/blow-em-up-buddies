@@ -2,7 +2,6 @@
 const THREE = require('three');
 const { ServerTank } = require('./driver');
 const { getTerrainHeight, getMapProps } = require('./maps');
-const env = require('./environment');
 
 const trunc2 = (val) => Math.round(val * 100) / 100;
 const trunc1 = (val) => Math.round(val * 10) / 10;
@@ -38,7 +37,7 @@ class Match {
         this.blastZones = [];
         this.explosions = [];
         this.hits = [];
-        this.shutters = this.mapName === 'geometric_gauntlet' ? JSON.parse(JSON.stringify(env.GAUNTLET_PROPS.shutters)) : [];
+        this.shutters = [];
 
         if (this.mode === 'CTF') {
             const mapProps = getMapProps(this.mapName);
@@ -74,6 +73,17 @@ class Match {
     removePlayer(socketId) {
         const mapping = this.playerMapping[socketId];
         if (mapping && mapping.tankId && this.tanks[mapping.tankId]) {
+            // Drop any CTF flags this tank is carrying
+            if (this.flags) {
+                for (let flag of this.flags) {
+                    if (flag.carrierId === mapping.tankId) {
+                        flag.carrierId = null;
+                        flag.x = this.tanks[mapping.tankId].position.x;
+                        flag.y = this.tanks[mapping.tankId].position.y + 2;
+                        flag.z = this.tanks[mapping.tankId].position.z;
+                    }
+                }
+            }
             if (mapping.role === 'driver') this.tanks[mapping.tankId].driverId = null;
             if (mapping.role === 'gunner') this.tanks[mapping.tankId].gunnerId = null;
             delete this.playerMapping[socketId];
@@ -200,6 +210,7 @@ class Match {
             if (b.type === 'rapid') {
                 let bestTarget = null; let bestDist = 60; let coneCosThreshold = Math.cos(15 * Math.PI / 180);
                 let bLen = Math.hypot(b.dx, b.dy, b.dz);
+                const mapObstacles = (getMapProps(this.mapName) || {}).obstacles || [];
                 for (let tId in this.tanks) {
                     if (tId === b.owner || this.tanks[tId].isDead) continue;
                     let isTeammate = ((this.mode === '3v3' || this.mode === 'CTF') && this.getTeam(tId) === this.getTeam(b.owner));
@@ -209,7 +220,15 @@ class Match {
                     let dist = Math.hypot(tdx, tdy, tdz);
                     if (dist > 0 && dist < bestDist) {
                         let dot = (b.dx * tdx + b.dy * tdy + b.dz * tdz) / (bLen * dist);
-                        if (dot > coneCosThreshold) { bestDist = dist; bestTarget = { dx: tdx/dist, dy: tdy/dist, dz: tdz/dist }; }
+                        if (dot > coneCosThreshold) {
+                            // Simple LOS check: skip seeking if an obstacle is between bullet and target
+                            let blocked = false;
+                            for (let obs of mapObstacles) {
+                                let toObs = Math.hypot(obs.x - b.x, obs.z - b.z);
+                                if (toObs < dist && toObs < obs.r + 5) { blocked = true; break; }
+                            }
+                            if (!blocked) { bestDist = dist; bestTarget = { dx: tdx/dist, dy: tdy/dist, dz: tdz/dist }; }
+                        }
                     }
                 }
                 if (bestTarget) {

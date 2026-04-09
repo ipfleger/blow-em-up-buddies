@@ -11,7 +11,7 @@ window.visualShutters = {};
 window.isMatchActive = false;
 window.myCurrentTankId = null;
 window.myCurrentRole = null;
-window.currentMapName = 'stress_test';
+window.currentMapName = 'trenches';
 window.currentMatchMode = 'FFA';
 
 window.lobbyTanks = {};
@@ -63,8 +63,27 @@ window.disposeHierarchy = function(node) {
     }
 };
 
+window.cleanupVisualTank = function(tank) {
+    if (!tank) return;
+    if (tank.healthRing) {
+        for (let mesh of tank.healthRing) {
+            window.Graphics.matchGroup.remove(mesh);
+            if (mesh.geometry) mesh.geometry.dispose();
+            if (mesh.material) mesh.material.dispose();
+        }
+        tank.healthRing = null;
+    }
+    if (tank.aimLine) {
+        window.Graphics.matchGroup.remove(tank.aimLine);
+        if (tank.aimLine.geometry) tank.aimLine.geometry.dispose();
+        if (tank.aimLine.material) tank.aimLine.material.dispose();
+        tank.aimLine = null;
+    }
+};
+
 window.destroyLobbyTank = function(tId) {
     if (window.lobbyTanks[tId]) {
+        window.cleanupVisualTank(window.lobbyTanks[tId]);
         window.disposeHierarchy(window.lobbyTanks[tId]);
         window.Graphics.matchGroup.remove(window.lobbyTanks[tId]);
         if (window.lobbyTanks[tId].turretRef) {
@@ -78,7 +97,7 @@ window.destroyLobbyTank = function(tId) {
 window.updateLobbyPreview = function(map, count) {
     if (window.isMatchActive) return;
     if (window.currentMapName !== map) {
-        window.currentMapName = map || 'bowl';
+        window.currentMapName = map || 'trenches';
         window.Graphics.rebuildMapGeometry(window.currentMapName);
         window.Graphics.loadEnvironmentProps(window.currentMapName);
     }
@@ -101,8 +120,10 @@ window.updateLobbyPreview = function(map, count) {
 
 window.onLobbyUpdate = function(lobby) {
     if (window.isMatchActive) return;
+    // Cache tank configs for use during match (since config is no longer sent every tick)
+    window._cachedTankConfigs = Object.assign({}, lobby.tankConfigs);
     if (window.currentMapName !== lobby.map) {
-        window.currentMapName = lobby.map || 'bowl';
+        window.currentMapName = lobby.map || 'trenches';
         window.Graphics.rebuildMapGeometry(window.currentMapName);
         window.Graphics.loadEnvironmentProps(window.currentMapName);
     }
@@ -110,9 +131,16 @@ window.onLobbyUpdate = function(lobby) {
     let count = lobby.maxTanks || 6; let radius = 15; let angleStep = (Math.PI * 2) / count;
     for (let i = 1; i <= count; i++) {
         let tId = `tank${i}`; let conf = lobby.tankConfigs[tId]; if (!conf) continue;
-        window.destroyLobbyTank(tId);
-        let tankGroup = window.TankFactory.createTank({ id: tId, ...conf }, window.Graphics.matchGroup);
-        window.lobbyTanks[tId] = tankGroup;
+        let existing = window.lobbyTanks[tId];
+        let configChanged = !existing || !existing._lastConfig ||
+            JSON.stringify(existing._lastConfig) !== JSON.stringify(conf);
+        if (configChanged) {
+            window.destroyLobbyTank(tId);
+            let tankGroup = window.TankFactory.createTank({ id: tId, ...conf }, window.Graphics.matchGroup);
+            tankGroup._lastConfig = { ...conf };
+            window.lobbyTanks[tId] = tankGroup;
+        }
+        let tankGroup = window.lobbyTanks[tId];
         let angle = (i - 1) * angleStep; let px = Math.cos(angle) * radius; let pz = Math.sin(angle) * radius;
         let py = window.getTerrainHeight(px, pz, window.currentMapName);
         tankGroup.position.set(px, py, pz); tankGroup.rotation.y = -angle + Math.PI / 2;
@@ -121,7 +149,7 @@ window.onLobbyUpdate = function(lobby) {
 };
 
 window.onLaunchGame = function(mapName) {
-    window.currentMapName = mapName || 'bowl'; window.isMatchActive = true;
+    window.currentMapName = mapName || 'trenches'; window.isMatchActive = true;
     document.getElementById('lobby-screen').classList.add('hidden');
     for (let tId in window.lobbyTanks) { window.destroyLobbyTank(tId); }
 
@@ -140,12 +168,26 @@ window.onLaunchGame = function(mapName) {
 
     if (window.isSpectating) {
         document.getElementById('crosshair').classList.add('hidden');
+        const specHint = document.getElementById('spectator-hint');
+        if (specHint) specHint.classList.remove('hidden');
     } else {
         document.getElementById('crosshair').style.transition = 'transform 0.1s, background-color 0.1s, border-color 0.1s, border-radius 0.1s';
     }
 
     window.Graphics.rebuildMapGeometry(window.currentMapName);
     window.Graphics.loadEnvironmentProps(window.currentMapName);
+
+    // Cleanup any existing visual tanks from a previous match
+    for (let tId in window.visualTanks) {
+        window.cleanupVisualTank(window.visualTanks[tId]);
+        window.disposeHierarchy(window.visualTanks[tId]);
+        window.Graphics.matchGroup.remove(window.visualTanks[tId]);
+        if (window.visualTanks[tId].turretRef) {
+            window.disposeHierarchy(window.visualTanks[tId].turretRef);
+            window.Graphics.matchGroup.remove(window.visualTanks[tId].turretRef);
+        }
+    }
+    window.visualTanks = {};
 
     // Role callout — shown every match start
     setTimeout(() => {
@@ -203,9 +245,11 @@ window.updateGame = function(serverState) {
         const btnCluster = document.getElementById('btn-cluster');
         const crosshair = document.getElementById('crosshair');
         const switchSeat = document.getElementById('btn-switch-seat');
+        const specHint = document.getElementById('spectator-hint');
         if (btnCluster) btnCluster.classList.remove('hidden');
         if (switchSeat) switchSeat.classList.remove('hidden');
         if (window.minimapCanvas) window.minimapCanvas.classList.remove('hidden');
+        if (specHint) specHint.classList.add('hidden');
 
         const btnPrimary = document.getElementById('btn-primary');
         const btnSecondary = document.getElementById('btn-secondary');
@@ -231,7 +275,8 @@ window.updateGame = function(serverState) {
     for (let tId in serverState.tanks) {
         let sp = serverState.tanks[tId];
         if (!window.visualTanks[tId]) {
-            window.visualTanks[tId] = window.TankFactory.createTank({id: tId, ...sp.config}, window.Graphics.matchGroup);
+            const cachedConf = (window._cachedTankConfigs && window._cachedTankConfigs[tId]) || {};
+            window.visualTanks[tId] = window.TankFactory.createTank({id: tId, ...cachedConf}, window.Graphics.matchGroup);
             window.visualTanks[tId].wasDead = false;
             window.visualTanks[tId].traverse(child => { if (child.isMesh) child.userData = { type: 'tank', id: tId }; });
             window.visualTanks[tId].turretRef.traverse(child => { if (child.isMesh) child.userData = { type: 'tank', id: tId }; });
@@ -314,7 +359,10 @@ window.updateGame = function(serverState) {
             if (tank.position.distanceTo(tank.targetPos) > 15) {
                 tank.position.copy(tank.targetPos); tank.quaternion.copy(tank.targetQuat);
             }
-            if (sp.isBoosting && sp.boost > 0) window.Graphics.emitSparks(tank, sp.rot, sp.config, sp.speed);
+            if (sp.isBoosting && sp.boost > 0) {
+                const cachedConf = (window._cachedTankConfigs && window._cachedTankConfigs[tId]) || {};
+                window.Graphics.emitSparks(tank, sp.rot, cachedConf, sp.speed);
+            }
 
             // --- HEALTH RING (segmented, around tank base) ---
             if (!tank.healthRing) {
@@ -359,25 +407,6 @@ window.updateGame = function(serverState) {
                 tank.aimLine.visible = true;
             } else if (tank.aimLine) {
                 tank.aimLine.visible = false;
-            }
-
-            // --- GRAPPLE LASER ---
-            if (sp.isGrappling) {
-                if (!tank.grappleLine) {
-                    const lineMat = new THREE.LineBasicMaterial({ color: 0x00ffcc, linewidth: 4, transparent: true, opacity: 0.8 });
-                    const lineGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
-                    tank.grappleLine = new THREE.Line(lineGeo, lineMat);
-                    window.Graphics.matchGroup.add(tank.grappleLine);
-                }
-                let mapProps = window.getMapProps(window.currentMapName);
-                if (mapProps && mapProps.cube) {
-                    let start = tank.turretRef.position.clone(); start.y += 0.5;
-                    let end = new THREE.Vector3(mapProps.cube.x, mapProps.cube.y + Math.sin(Date.now() * 0.003) * 1.5, mapProps.cube.z);
-                    tank.grappleLine.geometry.setFromPoints([start, end]);
-                    tank.grappleLine.visible = true;
-                }
-            } else {
-                if (tank.grappleLine) tank.grappleLine.visible = false;
             }
 
             // --- HUD RING INDICATOR (replaces hud-bars for player's tank) ---
@@ -455,6 +484,20 @@ window.updateGame = function(serverState) {
             let progress = 1.0 - (zData.life / 1.2); let scale = Math.max(0.01, Math.pow(progress, 0.2));
             window.zonePool[i].scale.setScalar(scale); window.zonePool[i].material.opacity = 0.2 * (1.0 - progress);
         }
+    }
+
+    // Trim pools if they've grown too large relative to current active count
+    const activeBulletCount = (serverState.bullets || []).length;
+    while (window.bulletPool.length > Math.max(20, activeBulletCount * 2)) {
+        let excess = window.bulletPool.pop();
+        window.Graphics.matchGroup.remove(excess);
+        if (excess.geometry) excess.geometry.dispose();
+    }
+    const activeZoneCount = (serverState.blastZones || []).length;
+    while (window.zonePool.length > Math.max(10, activeZoneCount * 2)) {
+        let excess = window.zonePool.pop();
+        window.Graphics.matchGroup.remove(excess);
+        if (excess.geometry) excess.geometry.dispose();
     }
 
     if (serverState.explosions) serverState.explosions.forEach(exp => {
@@ -536,20 +579,50 @@ window.updateGame = function(serverState) {
             window._prevFlagCarriers[key] = currCarrier;
             if (!window.ctfFlagMeshes[key]) {
                 const color = flag.team === 1 ? 0xb4d455 : 0xff3366;
-                const mat = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 1.5, transparent: true, opacity: 0.9 });
-                const mesh = new THREE.Mesh(new THREE.SphereGeometry(2, 16, 12), mat);
+                const mat = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 2.0, transparent: true, opacity: 0.92 });
+                const mesh = new THREE.Mesh(new THREE.SphereGeometry(3, 16, 12), mat);
                 mesh.userData = { type: 'ctfFlag', team: flag.team };
                 window.Graphics.matchGroup.add(mesh);
                 window.ctfFlagMeshes[key] = mesh;
             }
             const mesh = window.ctfFlagMeshes[key];
+            const pulse = Math.sin(Date.now() * 0.004) * 0.5 + 0.5;
+            mesh.material.emissiveIntensity = 1.5 + pulse;
+            mesh.scale.setScalar(1.0 + pulse * 0.1);
+            const flagStatus = flag.carrierId ? 'carried' : 'home';
             if (flag.carrierId && window.visualTanks[flag.carrierId] && !window.visualTanks[flag.carrierId].wasDead) {
                 const carrier = window.visualTanks[flag.carrierId];
-                mesh.position.set(carrier.position.x, carrier.position.y + 5, carrier.position.z);
+                mesh.position.set(carrier.position.x, carrier.position.y + 7, carrier.position.z);
             } else {
-                mesh.position.set(flag.homeX, flag.homeY + 2 + Math.sin(Date.now() * 0.003) * 0.8, flag.homeZ);
+                mesh.position.set(flag.homeX, flag.homeY + 3 + Math.sin(Date.now() * 0.003) * 1.0, flag.homeZ);
             }
         });
+
+        // --- CTF FLAG HUD STATUS ---
+        let flagHudEl = document.getElementById('ctf-flag-hud');
+        if (!flagHudEl) {
+            flagHudEl = document.createElement('div');
+            flagHudEl.id = 'ctf-flag-hud';
+            flagHudEl.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);display:flex;gap:16px;z-index:100;pointer-events:none;font-family:"Courier New",monospace;font-size:0.85rem;';
+            const uiLayer = document.getElementById('ui-layer');
+            if (uiLayer) uiLayer.appendChild(flagHudEl);
+        }
+        flagHudEl.innerHTML = serverState.flags.map(flag => {
+            const teamColor = flag.team === 1 ? '#b4d455' : '#ff3366';
+            let status, icon;
+            if (flag.carrierId) {
+                const carrierName = flag.carrierId === window.myCurrentTankId ? 'YOU' : flag.carrierId;
+                status = `⚡ CARRIED BY ${carrierName}`;
+                icon = '🚩';
+            } else {
+                status = '🏠 HOME';
+                icon = flag.team === 1 ? '🟢' : '🔴';
+            }
+            return `<div style="background:rgba(0,0,0,0.7);padding:4px 10px;border-radius:4px;border:1px solid ${teamColor};color:${teamColor};">${icon} T${flag.team}: ${status}</div>`;
+        }).join('');
+    } else {
+        const flagHudEl = document.getElementById('ctf-flag-hud');
+        if (flagHudEl) flagHudEl.remove();
     }
 
     // --- CTF SCORE HUD ---
@@ -731,12 +804,25 @@ function animate() {
         }
 
         if (window.myCurrentRole === 'spectator') {
-            let sSpeed = window.Controls.input.isBoosting ? 150 : 60;
-            let forward = new THREE.Vector3(0,0,-1).applyAxisAngle(new THREE.Vector3(0,1,0), window.Controls.specCam.yaw);
-            let right = new THREE.Vector3(1,0,0).applyAxisAngle(new THREE.Vector3(0,1,0), window.Controls.specCam.yaw);
-            window.Controls.specCam.x += (-window.Controls.input.moveY * forward.x + window.Controls.input.moveX * right.x) * sSpeed * delta; window.Controls.specCam.z += (-window.Controls.input.moveY * forward.z + window.Controls.input.moveX * right.z) * sSpeed * delta;
-            window.Controls.specCam.yaw -= window.Controls.aimJoystick.x * 2.5 * delta; window.Controls.specCam.pitch -= window.Controls.aimJoystick.y * 2.5 * delta; window.Controls.specCam.pitch = Math.max(-Math.PI/2, Math.min(Math.PI/2, window.Controls.specCam.pitch));
-            window.Graphics.camera.position.set(window.Controls.specCam.x, window.Controls.specCam.y, window.Controls.specCam.z); window.Graphics.camera.rotation.set(window.Controls.specCam.pitch, window.Controls.specCam.yaw, 0, 'YXZ');
+            // If locked onto a specific tank, follow that tank
+            if (window.spectatorFollowTank && window.visualTanks[window.spectatorFollowTank] && !window.visualTanks[window.spectatorFollowTank].wasDead) {
+                const followTank = window.visualTanks[window.spectatorFollowTank];
+                const idealPos = followTank.position.clone().add(new THREE.Vector3(0, 35, 25));
+                window.Graphics.camera.position.lerp(idealPos, 8 * delta);
+                window.Graphics.camera.lookAt(followTank.position);
+            } else {
+                // Free-fly spectator camera
+                let sSpeed = window.Controls.input.isBoosting ? 150 : 60;
+                let forward = new THREE.Vector3(0,0,-1).applyAxisAngle(new THREE.Vector3(0,1,0), window.Controls.specCam.yaw);
+                let right = new THREE.Vector3(1,0,0).applyAxisAngle(new THREE.Vector3(0,1,0), window.Controls.specCam.yaw);
+                window.Controls.specCam.x += (-window.Controls.input.moveY * forward.x + window.Controls.input.moveX * right.x) * sSpeed * delta;
+                window.Controls.specCam.z += (-window.Controls.input.moveY * forward.z + window.Controls.input.moveX * right.z) * sSpeed * delta;
+                window.Controls.specCam.yaw -= window.Controls.aimJoystick.x * 2.5 * delta;
+                window.Controls.specCam.pitch -= window.Controls.aimJoystick.y * 2.5 * delta;
+                window.Controls.specCam.pitch = Math.max(-Math.PI/2, Math.min(Math.PI/2, window.Controls.specCam.pitch));
+                window.Graphics.camera.position.set(window.Controls.specCam.x, window.Controls.specCam.y, window.Controls.specCam.z);
+                window.Graphics.camera.rotation.set(window.Controls.specCam.pitch, window.Controls.specCam.yaw, 0, 'YXZ');
+            }
         }
 
         if (window.myCurrentRole === 'gunner') {

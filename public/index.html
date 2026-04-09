@@ -158,11 +158,25 @@
         <!-- Respawn countdown overlay -->
         <div id="respawn-overlay" class="hidden"></div>
 
+        <!-- Spectator controls hint -->
+        <div id="spectator-hint" class="hidden" style="position:fixed;bottom:20px;left:50%;transform:translateX(-50%);color:rgba(255,255,255,0.5);font-family:'Courier New',monospace;font-size:0.75rem;pointer-events:none;z-index:100;text-align:center;">
+            SPECTATOR: Keys 1-6 follow tank · 0 free-fly
+        </div>
+
         <!-- Scoreboard overlay (shown while TAB held) -->
         <div id="scoreboard-overlay" class="hidden"></div>
 
         <!-- End-of-match overlay -->
         <div id="end-screen" class="hidden"></div>
+
+        <!-- Seat swap request overlay -->
+        <div id="swap-overlay" class="hidden" style="position:fixed;inset:0;z-index:200;display:flex;justify-content:center;align-items:center;background:rgba(0,0,0,0.7);">
+            <div style="background:#1a1a2e;padding:24px;border-radius:8px;text-align:center;border:1px solid #6dcbc3;min-width:240px;">
+                <p style="color:white;margin-bottom:16px;font-family:'Courier New',monospace;">Teammate wants to swap seats!</p>
+                <button id="swap-accept" style="background:#b4d455;color:#1f1c30;border:none;padding:10px 20px;border-radius:4px;font-family:'Courier New',monospace;font-weight:bold;cursor:pointer;margin-right:8px;">ACCEPT</button>
+                <button id="swap-deny" style="background:#ff3366;color:white;border:none;padding:10px 20px;border-radius:4px;font-family:'Courier New',monospace;font-weight:bold;cursor:pointer;">DENY</button>
+            </div>
+        </div>
 
         <!-- Tutorial overlay -->
         <div id="tutorial-overlay" class="hidden">

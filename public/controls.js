@@ -145,6 +145,7 @@ window.Controls = {
 
                 if (t.clientX < window.innerWidth / 2 && this.touchId === null) {
                     this.touchId = t.identifier; this.startXY = { x: t.clientX, y: t.clientY };
+                    this.joyBase.classList.remove('hidden');
                     this.joyBase.style.display = 'block'; this.joyBase.style.left = this.startXY.x + 'px'; this.joyBase.style.top = this.startXY.y + 'px';
                 }
             }
@@ -184,7 +185,9 @@ window.Controls = {
             this.lobbyDragActive = false;
             for(let t of e.changedTouches) {
                 if(t.identifier === this.touchId) {
-                    this.touchId = null; this.joyBase.style.display = 'none'; this.joyNub.style.transform = 'translate(-50%, -50%)';
+                    this.touchId = null;
+                    this.joyBase.classList.add('hidden');
+                    this.joyNub.style.transform = 'translate(-50%, -50%)';
                     this.input.moveX = 0; this.input.moveY = 0; this.aimJoystick.x = 0; this.aimJoystick.y = 0;
                 }
             }
@@ -242,7 +245,26 @@ window.Controls = {
     },
 
     setupKeyboard: function() {
-        window.addEventListener('keydown', e => { if (document.activeElement.tagName === 'INPUT') return; this.keys[e.code] = true; });
+        window.addEventListener('keydown', e => {
+            if (document.activeElement.tagName === 'INPUT') return;
+            this.keys[e.code] = true;
+            // Spectator camera: number keys 1-6 to lock onto tanks, 0 for free-fly
+            if (window.isMatchActive && window.myCurrentRole === 'spectator') {
+                if (e.code === 'Digit0') {
+                    window.spectatorFollowTank = null;
+                } else {
+                    const num = parseInt(e.key);
+                    if (num >= 1 && num <= 6) {
+                        const targetId = `tank${num}`;
+                        if (window.spectatorFollowTank === targetId) {
+                            window.spectatorFollowTank = null; // toggle off
+                        } else {
+                            window.spectatorFollowTank = targetId;
+                        }
+                    }
+                }
+            }
+        });
         window.addEventListener('keyup', e => this.keys[e.code] = false);
     },
 
