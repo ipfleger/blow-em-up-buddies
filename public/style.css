@@ -527,6 +527,7 @@ button:active { transform: scale(0.95); }
     justify-content: center;
     align-items: center;
     backdrop-filter: blur(8px);
+    pointer-events: auto;
 }
 .end-card {
     background: rgba(15, 12, 27, 0.95);
@@ -583,6 +584,7 @@ button:active { transform: scale(0.95); }
     justify-content: center;
     align-items: center;
     backdrop-filter: blur(6px);
+    pointer-events: auto;
 }
 .tutorial-card {
     background: rgba(15, 12, 27, 0.95);
@@ -612,6 +614,20 @@ button:active { transform: scale(0.95); }
     align-items: center;
     justify-content: space-between;
     margin-top: 24px;
+}
+.tutorial-dismiss-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 0.75rem;
+    cursor: pointer;
+}
+.tutorial-dismiss-label input[type="checkbox"] {
+    accent-color: var(--neon-cyan);
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
 }
 .tutorial-dots { display: flex; gap: 6px; }
 .tutorial-dots .dot {
