@@ -115,11 +115,27 @@ window.Graphics = {
         return new THREE.CanvasTexture(c);
     },
 
+    createTrenchesTexture: function() {
+        const c = document.createElement('canvas'); c.width = 512; c.height = 512; const cx = c.getContext('2d');
+        cx.fillStyle = '#7a6347'; cx.fillRect(0,0,512,512);
+        cx.fillStyle = 'rgba(40, 28, 15, 0.35)';
+        for(let x=0; x<512; x+=8) {
+            for(let y=0; y<512; y+=8) {
+                if (Math.random() > 0.65) { cx.fillRect(x + Math.random()*4, y + Math.random()*4, 6, 6); }
+            }
+        }
+        cx.strokeStyle = 'rgba(55, 40, 22, 0.5)'; cx.lineWidth = 3;
+        for(let i=0; i<6; i++) { cx.beginPath(); cx.moveTo(0, Math.random()*512); cx.lineTo(512, Math.random()*512); cx.stroke(); }
+        const tex = new THREE.CanvasTexture(c); tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.repeat.set(25, 25);
+        return tex;
+    },
+
     initMaterials: function() {
         this.mapMaterials['bowl'] = new THREE.MeshStandardMaterial({ map: this.createBowlTexture(), flatShading: true });
         this.mapMaterials['geometric_gauntlet'] = new THREE.MeshStandardMaterial({ map: this.createGauntletTexture(), flatShading: true, roughness: 1.0 });
         this.mapMaterials['shattered_city'] = new THREE.MeshStandardMaterial({ map: this.createShatteredTexture(), flatShading: true, roughness: 0.9 });
         this.mapMaterials['stress_test'] = new THREE.MeshStandardMaterial({ map: this.createStressTexture(), flatShading: true, roughness: 0.8 });
+        this.mapMaterials['trenches'] = new THREE.MeshStandardMaterial({ map: this.createTrenchesTexture(), flatShading: true, roughness: 0.9 });
     },
 
     // ==========================================
@@ -159,6 +175,16 @@ rebuildMapGeometry: function(mapName) {
         this.activeEnvironmentProps = [];
         this.animatedUpdrafts = [];
         window.visualShutters = {};
+
+        // Clean up CTF flag meshes from any previous match
+        if (window.ctfFlagMeshes) {
+            for (let key in window.ctfFlagMeshes) {
+                this.matchGroup.remove(window.ctfFlagMeshes[key]);
+                if (window.ctfFlagMeshes[key].geometry) window.ctfFlagMeshes[key].geometry.dispose();
+                if (window.ctfFlagMeshes[key].material) window.ctfFlagMeshes[key].material.dispose();
+            }
+        }
+        window.ctfFlagMeshes = {};
 
         // Fetch the dynamically generated props from the MapBuilder
         const props = window.getMapProps(mapName);

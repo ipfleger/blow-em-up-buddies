@@ -1,7 +1,7 @@
 // game-engine.js
 const THREE = require('three');
 const { ServerTank } = require('./driver');
-const { getTerrainHeight } = require('./maps');
+const { getTerrainHeight, getMapProps } = require('./maps');
 const env = require('./environment');
 
 const trunc2 = (val) => Math.round(val * 100) / 100;
@@ -19,7 +19,7 @@ class Match {
             let totalTanks = Object.keys(configs).length;
             for (let tId in configs) {
                 let num = parseInt(tId.replace('tank', ''));
-                let team = (this.mode === '3v3') ? (num <= Math.ceil(totalTanks / 2) ? 1 : 2) : num;
+                let team = (this.mode === '3v3' || this.mode === 'CTF') ? (num <= Math.ceil(totalTanks / 2) ? 1 : 2) : num;
                 let slotIndex = i % 3;
 
                 this.tanks[tId] = new ServerTank(tId, configs[tId], this.mapName, team, slotIndex);
@@ -33,6 +33,20 @@ class Match {
         this.explosions = [];
         this.hits = [];
         this.shutters = this.mapName === 'geometric_gauntlet' ? JSON.parse(JSON.stringify(env.GAUNTLET_PROPS.shutters)) : [];
+
+        if (this.mode === 'CTF') {
+            const mapProps = getMapProps(this.mapName);
+            const flagDefs = (mapProps && mapProps.flags && mapProps.flags.length === 2)
+                ? mapProps.flags
+                : [{ team: 1, x: -160, y: 2, z: 0 }, { team: 2, x: 160, y: 2, z: 0 }];
+            this.flags = flagDefs.map(f => ({
+                team: f.team,
+                x: f.x, y: f.y, z: f.z,
+                homeX: f.x, homeY: f.y, homeZ: f.z,
+                carrierId: null
+            }));
+            this.scores = { 1: 0, 2: 0 };
+        }
     }
 
     getTeam(tankId) {
@@ -142,7 +156,7 @@ class Match {
                 let bLen = Math.hypot(b.dx, b.dy, b.dz);
                 for (let tId in this.tanks) {
                     if (tId === b.owner || this.tanks[tId].isDead) continue;
-                    let isTeammate = (this.mode === '3v3' && this.getTeam(tId) === this.getTeam(b.owner));
+                    let isTeammate = ((this.mode === '3v3' || this.mode === 'CTF') && this.getTeam(tId) === this.getTeam(b.owner));
                     if (isTeammate) continue;
                     let target = this.tanks[tId];
                     let tdx = target.position.x - b.x; let tdy = target.position.y - b.y; let tdz = target.position.z - b.z;
@@ -182,7 +196,7 @@ class Match {
                     if (b.type === 'concussive') {
                         this.blastZones.push({ x: cX, y: cY, z: cZ, life: 1.2, owner: b.owner, hasPulsed: false });
                     } else if (b.type === 'rapid') {
-                        let isTeammate = (this.mode === '3v3' && this.getTeam(tId) === this.getTeam(b.owner));
+                        let isTeammate = ((this.mode === '3v3' || this.mode === 'CTF') && this.getTeam(tId) === this.getTeam(b.owner));
                         if (!isTeammate && target.dodgeInvulnTimer <= 0) {
                             target.health -= 6;
                             if (target.health <= 0) target.die();
@@ -249,7 +263,7 @@ class Match {
                         target.velocity.y += 2.0 * intensity;
                         target.isGrounded = false;
 
-                        let isTeammate = (this.mode === '3v3' && this.getTeam(tId) === this.getTeam(z.owner));
+                        let isTeammate = ((this.mode === '3v3' || this.mode === 'CTF') && this.getTeam(tId) === this.getTeam(z.owner));
                         if (!isTeammate) {
                             target.health -= 95 * intensity;
                             if (target.health <= 0) target.die();
@@ -281,7 +295,7 @@ class Match {
                     let p2Ramming = p2.driverInputs.isBoosting && Math.abs(p2.currentSpeed) > 85;
 
                     if (p1Ramming || p2Ramming) {
-                        let isTeammate = (this.mode === '3v3' && this.getTeam(tankIds[i]) === this.getTeam(tankIds[j]));
+                        let isTeammate = ((this.mode === '3v3' || this.mode === 'CTF') && this.getTeam(tankIds[i]) === this.getTeam(tankIds[j]));
                         let f1X = -Math.sin(p1.hullRotation); let f1Z = -Math.cos(p1.hullRotation);
                         let f2X = -Math.sin(p2.hullRotation); let f2Z = -Math.cos(p2.hullRotation);
                         let t1X = f1X * Math.sign(p1.currentSpeed); let t1Z = f1Z * Math.sign(p1.currentSpeed);
@@ -326,6 +340,60 @@ class Match {
         }
 
         for (let id of tankIds) state.tanks[id] = this.tanks[id].getNetworkState();
+
+        // --- CTF FLAG LOGIC ---
+        if (this.mode === 'CTF' && this.flags) {
+            for (let flag of this.flags) {
+                if (flag.carrierId) {
+                    const carrier = this.tanks[flag.carrierId];
+                    if (!carrier || carrier.isDead) {
+                        // Carrier died — reset flag to home position
+                        flag.carrierId = null;
+                        flag.x = flag.homeX; flag.y = flag.homeY; flag.z = flag.homeZ;
+                    } else {
+                        // Flag follows the carrier
+                        flag.x = carrier.position.x;
+                        flag.y = carrier.position.y + 5;
+                        flag.z = carrier.position.z;
+
+                        // Check if carrier has returned to their own flag's home base
+                        const carrierTeam = this.getTeam(flag.carrierId);
+                        const ownFlag = this.flags.find(f => f.team === carrierTeam);
+                        if (ownFlag && ownFlag.carrierId === null) {
+                            const dist = Math.hypot(carrier.position.x - ownFlag.homeX, carrier.position.z - ownFlag.homeZ);
+                            if (dist < 12) {
+                                this.scores[carrierTeam] = (this.scores[carrierTeam] || 0) + 1;
+                                flag.carrierId = null;
+                                flag.x = flag.homeX; flag.y = flag.homeY; flag.z = flag.homeZ;
+                            }
+                        }
+                    }
+                } else {
+                    // Flag is at rest — check if any enemy tank picks it up
+                    for (const tId of tankIds) {
+                        const tank = this.tanks[tId];
+                        if (tank.isDead) continue;
+                        const tankTeam = this.getTeam(tId);
+                        if (tankTeam === flag.team) continue; // Can't pick up own flag
+                        const alreadyCarrying = this.flags.some(f => f.carrierId === tId);
+                        if (alreadyCarrying) continue;
+                        const dist = Math.hypot(tank.position.x - flag.x, tank.position.z - flag.z);
+                        if (dist < 8) {
+                            flag.carrierId = tId;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            state.flags = this.flags.map(f => ({
+                team: f.team,
+                x: trunc1(f.x), y: trunc1(f.y), z: trunc1(f.z),
+                homeX: f.homeX, homeY: f.homeY, homeZ: f.homeZ,
+                carrierId: f.carrierId
+            }));
+            state.scores = { 1: this.scores[1], 2: this.scores[2] };
+        }
 
         state.bullets = this.bullets.map(b => ({
             x: trunc2(b.x), y: trunc2(b.y), z: trunc2(b.z),
