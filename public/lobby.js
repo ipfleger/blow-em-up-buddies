@@ -402,7 +402,10 @@ if (inlineReadyBtn) {
             panelIdx++;
             if (panelIdx >= panels.length) {
                 if (tutOverlay) tutOverlay.classList.add('hidden');
-                try { localStorage.setItem('hasSeenTutorial', '1'); } catch(e) {}
+                const dismissCheck = document.getElementById('chk-tutorial-dismiss');
+                if (dismissCheck && dismissCheck.checked) {
+                    try { localStorage.setItem('hasSeenTutorial', '1'); } catch(e) {}
+                }
                 panelIdx = 0;
                 showPanel(0);
             } else {
