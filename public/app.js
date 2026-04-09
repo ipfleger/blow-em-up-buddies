@@ -202,6 +202,17 @@ window.updateGame = function(serverState) {
                 window.deathCamPos = tank.position.clone().add(new THREE.Vector3(0, 40, 30));
                 window.deathCamTarget = tank.position.clone();
             }
+            // Audio: tank death / kill confirmation
+            if (window.AudioManager) {
+                const KILL_CONFIRM_WINDOW_MS = 1500;
+                if (tId === window.myCurrentTankId) {
+                    window.AudioManager.sounds.tankDeath();
+                } else if (window._lastHitByMe && window._lastHitByMe[tId] && (Date.now() - window._lastHitByMe[tId]) < KILL_CONFIRM_WINDOW_MS) {
+                    window.AudioManager.sounds.killConfirmed();
+                } else {
+                    window.AudioManager.sounds.tankDeath();
+                }
+            }
         }
         tank.wasDead = sp.isDead; tank.visible = !sp.isDead;
         if (!sp.isDead) tank.turretRef.visible = true;
@@ -219,6 +230,7 @@ window.updateGame = function(serverState) {
                 if (tId === window.myCurrentTankId) {
                     window.shakeTimer = 0.2;
                     window.shakeIntensity = Math.min(1.5, landingVel * 0.2);
+                    if (window.AudioManager) window.AudioManager.sounds.land();
                 }
             }
             tank.wasAirborne = !isGrounded;
@@ -303,6 +315,9 @@ window.updateGame = function(serverState) {
 
             // --- HUD RING INDICATOR (replaces hud-bars for player's tank) ---
             if (tId === window.myCurrentTankId) {
+                // Low-health audio heartbeat
+                if (window.AudioManager) window.AudioManager.checkLowHealth(sp.health);
+
                 const ringFill = document.getElementById('ring-fill');
                 const btnPrimary = document.getElementById('btn-primary');
                 const CIRCUMFERENCE = 276.46;
@@ -375,7 +390,10 @@ window.updateGame = function(serverState) {
         }
     }
 
-    if (serverState.explosions) serverState.explosions.forEach(exp => { window.Graphics.createShatterParticles(new THREE.Vector3(exp.x, exp.y, exp.z), 40); });
+    if (serverState.explosions) serverState.explosions.forEach(exp => {
+        window.Graphics.createShatterParticles(new THREE.Vector3(exp.x, exp.y, exp.z), 40);
+        if (window.AudioManager) window.AudioManager.sounds.concussiveImpact();
+    });
     if (serverState.hits) {
         serverState.hits.forEach(hit => {
             window.Graphics.createShatterParticles(new THREE.Vector3(hit.x, hit.y, hit.z), 3, 0xffe600);
@@ -386,6 +404,12 @@ window.updateGame = function(serverState) {
                 window.shakeIntensity = 0.4;
                 // Floating damage number
                 spawnDamageNumber(hit.x, hit.y, hit.z, hit.damage || 6);
+                // Track for kill-confirm detection
+                if (hit.targetId) {
+                    if (!window._lastHitByMe) window._lastHitByMe = {};
+                    window._lastHitByMe[hit.targetId] = Date.now();
+                }
+                if (window.AudioManager) window.AudioManager.sounds.hitConfirm();
             }
         });
     }
@@ -419,8 +443,25 @@ window.updateGame = function(serverState) {
     // --- CTF FLAGS ---
     if (serverState.flags) {
         if (!window.ctfFlagMeshes) window.ctfFlagMeshes = {};
+        if (!window._prevFlagCarriers) window._prevFlagCarriers = {};
         serverState.flags.forEach(flag => {
             const key = `team${flag.team}`;
+            const prevCarrier = window._prevFlagCarriers[key];
+            const currCarrier = flag.carrierId || null;
+
+            // Detect pickup / drop events for audio
+            if (window.AudioManager && prevCarrier !== undefined) {
+                if (!prevCarrier && currCarrier) {
+                    // Flag was just picked up
+                    if (currCarrier === window.myCurrentTankId) {
+                        window.AudioManager.sounds.flagPickup();
+                    } else {
+                        window.AudioManager.sounds.flagAlert();
+                    }
+                }
+                // Flag drop/capture handled by the CTF score section below
+            }
+            window._prevFlagCarriers[key] = currCarrier;
             if (!window.ctfFlagMeshes[key]) {
                 const color = flag.team === 1 ? 0xb4d455 : 0xff3366;
                 const mat = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 1.5, transparent: true, opacity: 0.9 });
@@ -441,6 +482,18 @@ window.updateGame = function(serverState) {
 
     // --- CTF SCORE HUD ---
     if (serverState.mode === 'CTF' && serverState.scores) {
+        // Detect score change → flag capture audio
+        if (window.AudioManager) {
+            if (!window._prevCTFScores) window._prevCTFScores = {};
+            for (const team in serverState.scores) {
+                const prev = window._prevCTFScores[team] || 0;
+                if (serverState.scores[team] > prev) {
+                    window.AudioManager.sounds.flagCapture();
+                }
+            }
+            window._prevCTFScores = Object.assign({}, serverState.scores);
+        }
+
         let scoreEl = document.getElementById('ctf-scores');
         if (!scoreEl) {
             scoreEl = document.createElement('div');

@@ -307,3 +307,80 @@ button:active { transform: scale(0.95); }
     .tank-icon-card { width: 30%; min-width: 90px; }
     .garage-content { padding-bottom: 30px; }
 }
+
+/* ============================================================
+   SETTINGS OVERLAY
+   ============================================================ */
+.settings-card {
+    width: 320px;
+    max-width: 90vw;
+}
+.settings-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 18px;
+}
+.settings-title {
+    color: var(--neon-cyan);
+    font-size: 1.1rem;
+    margin: 0;
+}
+.settings-row {
+    margin-bottom: 16px;
+}
+.settings-row label {
+    margin-bottom: 10px;
+}
+.volume-control {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.volume-icon {
+    color: var(--text-dim);
+    font-size: 1.1rem;
+    flex-shrink: 0;
+}
+.volume-slider {
+    flex: 1;
+    -webkit-appearance: none;
+    appearance: none;
+    height: 4px;
+    background: rgba(109, 203, 195, 0.25);
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+    border: none;
+    padding: 0;
+    width: auto;
+}
+.volume-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--neon-cyan);
+    cursor: pointer;
+    box-shadow: 0 0 6px rgba(109, 203, 195, 0.6);
+}
+.volume-slider::-moz-range-thumb {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--neon-cyan);
+    cursor: pointer;
+    border: none;
+    box-shadow: 0 0 6px rgba(109, 203, 195, 0.6);
+}
+.volume-slider::-webkit-slider-runnable-track {
+    height: 4px;
+    border-radius: 2px;
+    background: rgba(109, 203, 195, 0.25);
+}
+.volume-slider::-moz-range-track {
+    height: 4px;
+    border-radius: 2px;
+    background: rgba(109, 203, 195, 0.25);
+}

@@ -358,3 +358,29 @@ window.socket.on('lobby-update', (lobby) => {
         seatInline.textContent = window.myRole ? window.myRole.toUpperCase() : '';
     }
 });
+
+// --- SETTINGS PANEL ---
+(function () {
+    const overlay = document.getElementById('settings-overlay');
+    const btnOpen = document.getElementById('btn-open-settings');
+    const btnClose = document.getElementById('btn-close-settings');
+    const slider = document.getElementById('slider-volume');
+
+    if (overlay && btnOpen && btnClose && slider) {
+        btnOpen.addEventListener('click', () => {
+            if (window.AudioManager) slider.value = window.AudioManager.getVolume();
+            overlay.classList.remove('hidden');
+        });
+        btnClose.addEventListener('click', () => {
+            overlay.classList.add('hidden');
+        });
+        // Close on backdrop click
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) overlay.classList.add('hidden');
+        });
+        // Update volume live
+        slider.addEventListener('input', () => {
+            if (window.AudioManager) window.AudioManager.setVolume(slider.value);
+        });
+    }
+}());
