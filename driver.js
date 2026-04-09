@@ -366,7 +366,10 @@ class ServerTank {
                     this.velocity.y = this.velocity.y > 0 ? Math.max(this.velocity.y * 0.5, CONFIG.jumpForce * 0.4) : CONFIG.jumpForce * 0.4;
                     this.velocity.x += (dirX * forwardPropulsion + rightX * sidePropulsion) * CONFIG.dodgeForce;
                     this.velocity.z += (dirZ * forwardPropulsion + rightZ * sidePropulsion) * CONFIG.dodgeForce;
-                    this.isFlipping = true; this.flipAngle = 0; this.flipAxis.set(normY, 0, -normX).normalize();
+                    this.isFlipping = true; this.flipAngle = 0;
+                    const worldFlipX = dirX * forwardPropulsion + rightX * sidePropulsion;
+                    const worldFlipZ = dirZ * forwardPropulsion + rightZ * sidePropulsion;
+                    this.flipAxis.set(worldFlipZ, 0, -worldFlipX).normalize();
                     this.dodgeInvulnTimer = 0.15;
                 } else this.velocity.y += CONFIG.jumpForce * 1.2;
             }
@@ -384,7 +387,7 @@ class ServerTank {
         if (!this.isGrounded) {
             this.velocity.y += CONFIG.gravity * 60 * delta;
             if (this.isEffectivelyBoosting && this.boost > 0) {
-                this.velocity.y += 0.12 * 60 * delta;
+                this.velocity.y += 0.02 * 60 * delta;
                 const airForward = new THREE.Vector3(0, 0, -1).applyAxisAngle(new THREE.Vector3(0, 1, 0), this.hullRotation);
                 this.velocity.x += airForward.x * 0.08 * 60 * delta;
                 this.velocity.z += airForward.z * 0.08 * 60 * delta;

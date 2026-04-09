@@ -416,3 +416,56 @@ if (inlineReadyBtn) {
 
     showPanel(0);
 }());
+
+// --- PAUSE MENU ---
+(function () {
+    const pauseOverlay = document.getElementById('pause-overlay');
+    const btnPause = document.getElementById('btn-pause');
+    const btnResume = document.getElementById('btn-pause-resume');
+    const btnPauseSettings = document.getElementById('btn-pause-settings');
+    const btnLeave = document.getElementById('btn-pause-leave');
+    const settingsOverlay = document.getElementById('settings-overlay');
+
+    function openPause() {
+        if (pauseOverlay) pauseOverlay.classList.remove('hidden');
+    }
+
+    function closePause() {
+        if (pauseOverlay) pauseOverlay.classList.add('hidden');
+    }
+
+    function isInMatch() {
+        const btnPauseEl = document.getElementById('btn-pause');
+        return btnPauseEl && !btnPauseEl.classList.contains('hidden');
+    }
+
+    if (btnPause) btnPause.addEventListener('click', openPause);
+
+    if (btnResume) btnResume.addEventListener('click', closePause);
+
+    if (btnPauseSettings) {
+        btnPauseSettings.addEventListener('click', () => {
+            closePause();
+            if (settingsOverlay) {
+                if (window.GameSettings) window.GameSettings.syncUI();
+                settingsOverlay.classList.remove('hidden');
+            }
+        });
+    }
+
+    if (btnLeave) {
+        btnLeave.addEventListener('click', () => {
+            window.location.reload();
+        });
+    }
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && isInMatch()) {
+            if (pauseOverlay && !pauseOverlay.classList.contains('hidden')) {
+                closePause();
+            } else {
+                openPause();
+            }
+        }
+    });
+}());

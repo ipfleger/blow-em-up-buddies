@@ -42,7 +42,7 @@
             <div class="host-controls">
                 <div class="selector-card">
                     <button id="btn-map-prev">&lt;</button>
-                    <span id="lbl-setup-map">Shattered City</span>
+                    <span id="lbl-setup-map">Trenches</span>
                     <button id="btn-map-next">&gt;</button>
                 </div>
                 <div class="selector-card">
@@ -116,6 +116,7 @@
         </div>
 
         <button id="btn-switch-seat" class="interactive hidden">SWAP</button>
+        <button id="btn-pause" class="icon-btn interactive hidden" style="position:fixed;top:14px;left:14px;z-index:110;">&#9776;</button>
         <div id="crosshair" class="hidden"></div>
         <div id="joy-base" class="joystick-base hidden"><div id="joy-nub" class="joystick-nub"></div></div>
 
@@ -214,6 +215,16 @@
             <div style="font-size:3rem;margin-bottom:16px;">🔄</div>
             <div style="font-size:1.2rem;font-weight:bold;color:var(--neon-cyan);margin-bottom:8px;">ROTATE YOUR DEVICE</div>
             <div style="color:rgba(255,255,255,0.6);font-size:0.9rem;">This game requires landscape orientation</div>
+        </div>
+
+        <!-- Pause overlay -->
+        <div id="pause-overlay" class="screen interactive hidden" style="z-index:450;">
+            <div class="menu-card text-center">
+                <h2 style="color:var(--neon-cyan);letter-spacing:4px;margin-bottom:24px;">PAUSED</h2>
+                <button id="btn-pause-resume" class="primary-btn" style="width:100%;margin-bottom:10px;">RESUME</button>
+                <button id="btn-pause-settings" class="secondary-btn" style="width:100%;margin-bottom:10px;">SETTINGS</button>
+                <button id="btn-pause-leave" class="secondary-btn" style="width:100%;border-color:var(--neon-pink);color:var(--neon-pink);">LEAVE MATCH</button>
+            </div>
         </div>
 
         <!-- Settings overlay -->

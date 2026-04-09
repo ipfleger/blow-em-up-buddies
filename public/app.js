@@ -248,6 +248,8 @@ window.updateGame = function(serverState) {
         const specHint = document.getElementById('spectator-hint');
         if (btnCluster) btnCluster.classList.remove('hidden');
         if (switchSeat) switchSeat.classList.remove('hidden');
+        const btnPause = document.getElementById('btn-pause');
+        if (btnPause) btnPause.classList.remove('hidden');
         if (window.minimapCanvas) window.minimapCanvas.classList.remove('hidden');
         if (specHint) specHint.classList.add('hidden');
 
