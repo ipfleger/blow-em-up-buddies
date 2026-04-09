@@ -272,7 +272,8 @@ window.Controls = {
             this.input.isFiring = this.touchBtns.boost || this.keys['Space'];
             if (this.input.isFiring && !prevFiring && window.AudioManager) {
                 const now = Date.now();
-                if (!this._lastConcussiveSnd || now - this._lastConcussiveSnd > 1150) {
+                const CONCUSSIVE_SOUND_COOLDOWN = 1150;
+                if (!this._lastConcussiveSnd || now - this._lastConcussiveSnd > CONCUSSIVE_SOUND_COOLDOWN) {
                     this._lastConcussiveSnd = now;
                     window.AudioManager.sounds.concussiveFire();
                 }

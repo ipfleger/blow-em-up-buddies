@@ -345,16 +345,19 @@ window.AudioManager = (function () {
 
     // ─── Low-health heartbeat manager ───────────────────────────────────────
 
+    const LOW_HEALTH_THRESHOLD = 30;
+    const LOW_HEALTH_PULSE_INTERVAL_MS = 850;
+
     let _lowHealthInterval = null;
     let _wasLowHealth = false;
 
     function checkLowHealth(health) {
-        if (health > 0 && health < 30) {
+        if (health > 0 && health < LOW_HEALTH_THRESHOLD) {
             if (!_wasLowHealth) {
                 _wasLowHealth = true;
                 _lowHealthInterval = setInterval(() => {
                     if (_wasLowHealth) sounds.lowHealthPulse();
-                }, 850);
+                }, LOW_HEALTH_PULSE_INTERVAL_MS);
             }
         } else {
             if (_wasLowHealth) {

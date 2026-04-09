@@ -204,9 +204,10 @@ window.updateGame = function(serverState) {
             }
             // Audio: tank death / kill confirmation
             if (window.AudioManager) {
+                const KILL_CONFIRM_WINDOW_MS = 1500;
                 if (tId === window.myCurrentTankId) {
                     window.AudioManager.sounds.tankDeath();
-                } else if (window._lastHitByMe && window._lastHitByMe[tId] && (Date.now() - window._lastHitByMe[tId]) < 1500) {
+                } else if (window._lastHitByMe && window._lastHitByMe[tId] && (Date.now() - window._lastHitByMe[tId]) < KILL_CONFIRM_WINDOW_MS) {
                     window.AudioManager.sounds.killConfirmed();
                 } else {
                     window.AudioManager.sounds.tankDeath();
