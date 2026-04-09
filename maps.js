@@ -57,46 +57,66 @@ const MapRegistry = {
         .setSpawns((team, index) => ({ x: team === 1 ? -45 : 45, y: 10, z: (index % 3 - 1) * 20 }))
         .build(),
 
-    // --- MAP 4: TRENCHES (CTF) ---
+    // --- MAP 4: TRENCHES (CTF) — Alien Asteroid ---
     trenches: new Builder('trenches')
-        // Mostly flat terrain with a central trench dividing the two teams
-        .addCanyonX(-25, 25, -10, 40) // Central trench, gentle 40-unit slopes
+        // Wide central canyon dividing the two halves
+        .addCanyonX(-35, 35, -15, 60)
 
-        // Raised launch pads on north and south flanks for jumping across the trench
-        .addPlateau(0, -95, 22, 8, 18)
-        .addPlateau(0, 95, 22, 8, 18)
+        // Impact craters scattered across the map (raised rims for air launches)
+        .addCustomTerrain((x, z, h) => {
+            const craters = [
+                { cx: 150, cz: 150, R: 55, D: 10 },
+                { cx: -150, cz: 150, R: 55, D: 10 },
+                { cx: 150, cz: -150, R: 55, D: 10 },
+                { cx: -150, cz: -150, R: 55, D: 10 },
+                { cx: 80, cz: -200, R: 40, D: 8 },
+                { cx: -80, cz: 200, R: 40, D: 8 },
+                { cx: 0, cz: 300, R: 50, D: 9 },
+                { cx: 0, cz: -300, R: 50, D: 9 },
+                { cx: -250, cz: 0, R: 45, D: 8 },
+                { cx: 250, cz: 0, R: 45, D: 8 },
+            ];
+            let delta = 0;
+            for (const { cx, cz, R, D } of craters) {
+                const dist = Math.hypot(x - cx, z - cz);
+                if (dist < R) {
+                    delta += -D * Math.cos(Math.PI * dist / R);
+                } else if (dist < R * 1.3) {
+                    delta += 3 * (1 - (dist - R) / (R * 0.3));
+                }
+            }
+            return h + delta;
+        })
 
-        // Elevated sniper platforms (second level) on each side
-        .addPlatform(-60, 18, -90, 38, 38)  // Team 1 sniper north
-        .addPlatform(-60, 18, 90, 38, 38)   // Team 1 sniper south
-        .addPlatform(60, 18, -90, 38, 38)   // Team 2 sniper north
-        .addPlatform(60, 18, 90, 38, 38)    // Team 2 sniper south
+        // Monoliths — tall obelisks and medium cover objects
+        // Corner obelisks
+        .addPillar(200, 200, 6, 70)
+        .addPillar(-200, 200, 6, 70)
+        .addPillar(200, -200, 6, 70)
+        .addPillar(-200, -200, 6, 70)
+        // Canyon-edge monoliths
+        .addPillar(40, 60, 8, 45)
+        .addPillar(-40, 60, 8, 45)
+        .addPillar(40, -60, 8, 45)
+        .addPillar(-40, -60, 8, 45)
+        // Central area pillars
+        .addPillar(35, 0, 4, 40)
+        .addPillar(-35, 0, 4, 40)
+        .addPillar(0, 35, 4, 40)
+        .addPillar(0, -35, 4, 40)
+        // Outer scattered monoliths
+        .addPillar(300, 0, 10, 55)
+        .addPillar(-300, 0, 10, 55)
+        .addPillar(0, 300, 10, 55)
+        .addPillar(0, -300, 10, 55)
+        .addPillar(150, -250, 5, 80)
+        .addPillar(-150, 250, 5, 80)
 
-        // Ramps up to the sniper platforms
-        .addStaircase(-80, -90, -60, -90, 0, 18, 4, 10)  // Team 1 north ramp
-        .addStaircase(-80, 90, -60, 90, 0, 18, 4, 10)    // Team 1 south ramp
-        .addStaircase(80, -90, 60, -90, 0, 18, 4, 10)    // Team 2 north ramp
-        .addStaircase(80, 90, 60, 90, 0, 18, 4, 10)      // Team 2 south ramp
+        // CTF flag home positions — wide apart on the expanded map
+        .addFlag(1, -300, 2, 0)
+        .addFlag(2, 300, 2, 0)
 
-        // Team 1 base cover pillars
-        .addPillar(-140, -20, 5, 12)
-        .addPillar(-140, 0, 5, 12)
-        .addPillar(-140, 20, 5, 12)
-        .addPillar(-120, -38, 5, 10)
-        .addPillar(-120, 38, 5, 10)
-
-        // Team 2 base cover pillars
-        .addPillar(140, -20, 5, 12)
-        .addPillar(140, 0, 5, 12)
-        .addPillar(140, 20, 5, 12)
-        .addPillar(120, -38, 5, 10)
-        .addPillar(120, 38, 5, 10)
-
-        // CTF flag home positions (floating spheres rendered by the client)
-        .addFlag(1, -160, 2, 0)
-        .addFlag(2, 160, 2, 0)
-
-        .setSpawns((team, index) => ({ x: team === 1 ? -150 : 150, y: 2, z: (index % 3 - 1) * 35 }))
+        .setSpawns((team, index) => ({ x: team === 1 ? -280 : 280, y: 5, z: (index % 3 - 1) * 50 }))
         .build()
 };
 
