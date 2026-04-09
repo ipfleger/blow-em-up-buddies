@@ -78,11 +78,13 @@ const MAP_OPTIONS = [
     { id: 'shattered_city', name: 'Shattered City' },
     { id: 'bowl', name: 'The Bowl' },
     { id: 'geometric_gauntlet', name: 'Gauntlet' },
-    { id: 'flatland', name: 'Flatland' }
+    { id: 'flatland', name: 'Flatland' },
+    { id: 'trenches', name: 'Trenches' }
 ];
 const MODE_OPTIONS = [
     { id: 'FFA', name: 'Free-For-All' },
-    { id: '3v3', name: 'Team Match' }
+    { id: '3v3', name: 'Team Match' },
+    { id: 'CTF', name: 'Capture The Flag' }
 ];
 
 let hostMapIdx = 0;

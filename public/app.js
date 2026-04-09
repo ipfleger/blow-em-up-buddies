@@ -415,6 +415,45 @@ window.updateGame = function(serverState) {
             }
         });
     }
+
+    // --- CTF FLAGS ---
+    if (serverState.flags) {
+        if (!window.ctfFlagMeshes) window.ctfFlagMeshes = {};
+        serverState.flags.forEach(flag => {
+            const key = `team${flag.team}`;
+            if (!window.ctfFlagMeshes[key]) {
+                const color = flag.team === 1 ? 0xb4d455 : 0xff3366;
+                const mat = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 1.5, transparent: true, opacity: 0.9 });
+                const mesh = new THREE.Mesh(new THREE.SphereGeometry(2, 16, 12), mat);
+                mesh.userData = { type: 'ctfFlag', team: flag.team };
+                window.Graphics.matchGroup.add(mesh);
+                window.ctfFlagMeshes[key] = mesh;
+            }
+            const mesh = window.ctfFlagMeshes[key];
+            if (flag.carrierId && window.visualTanks[flag.carrierId] && !window.visualTanks[flag.carrierId].wasDead) {
+                const carrier = window.visualTanks[flag.carrierId];
+                mesh.position.set(carrier.position.x, carrier.position.y + 5, carrier.position.z);
+            } else {
+                mesh.position.set(flag.homeX, flag.homeY + 2 + Math.sin(Date.now() * 0.003) * 0.8, flag.homeZ);
+            }
+        });
+    }
+
+    // --- CTF SCORE HUD ---
+    if (serverState.mode === 'CTF' && serverState.scores) {
+        let scoreEl = document.getElementById('ctf-scores');
+        if (!scoreEl) {
+            scoreEl = document.createElement('div');
+            scoreEl.id = 'ctf-scores';
+            scoreEl.style.cssText = 'position:fixed;top:12px;left:50%;transform:translateX(-50%);color:white;font-size:1.6rem;font-family:"Courier New",monospace;z-index:100;text-shadow:0 0 8px rgba(0,0,0,0.8);letter-spacing:0.1em;pointer-events:none;';
+            const uiLayer = document.getElementById('ui-layer');
+            if (uiLayer) uiLayer.appendChild(scoreEl);
+        }
+        scoreEl.innerHTML = `<span style="color:#b4d455">${serverState.scores[1] || 0}</span> <span style="color:#aaa">—</span> <span style="color:#ff3366">${serverState.scores[2] || 0}</span>`;
+    } else {
+        const scoreEl = document.getElementById('ctf-scores');
+        if (scoreEl) scoreEl.remove();
+    }
 };
 
 // --- Floating damage number spawn ---

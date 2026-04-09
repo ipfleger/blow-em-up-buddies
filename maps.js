@@ -55,6 +55,48 @@ const MapRegistry = {
 
         // Spawns
         .setSpawns((team, index) => ({ x: team === 1 ? -45 : 45, y: 10, z: (index % 3 - 1) * 20 }))
+        .build(),
+
+    // --- MAP 4: TRENCHES (CTF) ---
+    trenches: new Builder('trenches')
+        // Mostly flat terrain with a central trench dividing the two teams
+        .addCanyonX(-25, 25, -10, 40) // Central trench, gentle 40-unit slopes
+
+        // Raised launch pads on north and south flanks for jumping across the trench
+        .addPlateau(0, -95, 22, 8, 18)
+        .addPlateau(0, 95, 22, 8, 18)
+
+        // Elevated sniper platforms (second level) on each side
+        .addPlatform(-60, 18, -90, 38, 38)  // Team 1 sniper north
+        .addPlatform(-60, 18, 90, 38, 38)   // Team 1 sniper south
+        .addPlatform(60, 18, -90, 38, 38)   // Team 2 sniper north
+        .addPlatform(60, 18, 90, 38, 38)    // Team 2 sniper south
+
+        // Ramps up to the sniper platforms
+        .addStaircase(-80, -90, -60, -90, 0, 18, 4, 10)  // Team 1 north ramp
+        .addStaircase(-80, 90, -60, 90, 0, 18, 4, 10)    // Team 1 south ramp
+        .addStaircase(80, -90, 60, -90, 0, 18, 4, 10)    // Team 2 north ramp
+        .addStaircase(80, 90, 60, 90, 0, 18, 4, 10)      // Team 2 south ramp
+
+        // Team 1 base cover pillars
+        .addPillar(-140, -20, 5, 12)
+        .addPillar(-140, 0, 5, 12)
+        .addPillar(-140, 20, 5, 12)
+        .addPillar(-120, -38, 5, 10)
+        .addPillar(-120, 38, 5, 10)
+
+        // Team 2 base cover pillars
+        .addPillar(140, -20, 5, 12)
+        .addPillar(140, 0, 5, 12)
+        .addPillar(140, 20, 5, 12)
+        .addPillar(120, -38, 5, 10)
+        .addPillar(120, 38, 5, 10)
+
+        // CTF flag home positions (floating spheres rendered by the client)
+        .addFlag(1, -160, 2, 0)
+        .addFlag(2, 160, 2, 0)
+
+        .setSpawns((team, index) => ({ x: team === 1 ? -150 : 150, y: 2, z: (index % 3 - 1) * 35 }))
         .build()
 };
 

@@ -94,6 +94,12 @@ class MapBuilder {
         return this;
     }
 
+    addFlag(team, x, y, z) {
+        if (!this.props.flags) this.props.flags = [];
+        this.props.flags.push({ team, x, y, z });
+        return this;
+    }
+
     addBuilding(cx, cz, size, height, doorWidth) {
         let half = size / 2;
         let pRadius = 2.5;
