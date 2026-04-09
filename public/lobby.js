@@ -74,11 +74,6 @@ document.getElementById('btn-join').onclick = () => {
 
 // --- STATE 2: HOST SETUP ---
 const MAP_OPTIONS = [
-    { id: 'stress_test', name: 'Stress Test' },
-    { id: 'shattered_city', name: 'Shattered City' },
-    { id: 'bowl', name: 'The Bowl' },
-    { id: 'geometric_gauntlet', name: 'Gauntlet' },
-    { id: 'flatland', name: 'Flatland' },
     { id: 'trenches', name: 'Trenches' }
 ];
 const MODE_OPTIONS = [
@@ -258,6 +253,12 @@ window.socket.on('lobby-update', (lobby) => {
             launchBtn.onclick = () => window.socket.emit('nudge-unready');
         }
     }
+
+    // Sync inline seat/room fields
+    const codeInline = document.getElementById('lobby-code-inline');
+    const seatInline = document.getElementById('lobby-seat-inline');
+    if (codeInline && window.currentRoomCode) codeInline.textContent = 'ROOM: ' + window.currentRoomCode;
+    if (seatInline) seatInline.textContent = window.myRole ? window.myRole.toUpperCase() : '';
 });
 
 window.socket.on('receive-nudge', () => {
@@ -347,17 +348,6 @@ const inlineReadyBtn = document.getElementById('btn-ready-inline');
 if (inlineReadyBtn) {
     inlineReadyBtn.addEventListener('click', () => window.socket.emit('toggle-ready'));
 }
-
-// Lobby update: sync inline fields
-const origLobbyUpdate = window.socket._callbacks && window.socket._callbacks['$lobby-update'];
-window.socket.on('lobby-update', (lobby) => {
-    const codeInline = document.getElementById('lobby-code-inline');
-    const seatInline = document.getElementById('lobby-seat-inline');
-    if (codeInline && window.currentRoomCode) codeInline.textContent = 'ROOM: ' + window.currentRoomCode;
-    if (seatInline) {
-        seatInline.textContent = window.myRole ? window.myRole.toUpperCase() : '';
-    }
-});
 
 // --- SETTINGS PANEL ---
 (function () {

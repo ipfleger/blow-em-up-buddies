@@ -119,9 +119,9 @@ function precomputeCache(mapName) {
     }
 }
 
-function getTerrainHeight(x, z, mapName = 'bowl') {
-    // Safety check: if mapName is missing or invalid, fallback to bowl
-    if (!mapName || !MapRegistry[mapName]) mapName = 'bowl';
+function getTerrainHeight(x, z, mapName = 'trenches') {
+    // Safety check: if mapName is missing or invalid, fallback to trenches
+    if (!mapName || !MapRegistry[mapName]) mapName = 'trenches';
 
     let activeMap = MapRegistry[mapName];
 
@@ -157,12 +157,12 @@ function getTerrainHeight(x, z, mapName = 'bowl') {
 }
 
 function getSpawnPoint(mapName, team, index) {
-    let activeMap = MapRegistry[mapName] || MapRegistry['bowl'];
+    let activeMap = MapRegistry[mapName] || MapRegistry['trenches'];
     return activeMap.getSpawn(team, index);
 }
 
 function getMapProps(mapName) {
-    let activeMap = MapRegistry[mapName] || MapRegistry['bowl'];
+    let activeMap = MapRegistry[mapName] || MapRegistry['trenches'];
     return activeMap.props;
 }
 

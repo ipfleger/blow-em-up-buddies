@@ -54,7 +54,7 @@ window.Graphics = {
 
         const floorGeo = new THREE.PlaneGeometry(1000, 1000, 250, 250);
         floorGeo.rotateX(-Math.PI / 2);
-        this.floorMesh = new THREE.Mesh(floorGeo, this.mapMaterials['bowl']);
+        this.floorMesh = new THREE.Mesh(floorGeo, this.mapMaterials['trenches']);
         this.floorMesh.userData = { type: 'floor' };
         this.matchGroup.add(this.floorMesh);
 
@@ -155,11 +155,17 @@ window.Graphics = {
     // ==========================================
 
 rebuildMapGeometry: function(mapName) {
-        // Safety: default to bowl if map is undefined
-        const activeMapName = mapName || 'bowl';
+        // Safety: default to trenches if map is undefined
+        const activeMapName = mapName || 'trenches';
+
+        // Dispose old floor material/texture before replacing
+        if (this.floorMesh && this.floorMesh.material) {
+            if (this.floorMesh.material.map) this.floorMesh.material.map.dispose();
+            this.floorMesh.material.dispose();
+        }
 
         // Update visual materials first
-        this.floorMesh.material = this.mapMaterials[activeMapName] || this.mapMaterials['bowl'];
+        this.floorMesh.material = this.mapMaterials[activeMapName] || this.mapMaterials['trenches'];
 
         if (activeMapName === 'shattered_city') {
             this.scene.background = new THREE.Color(0x1a1525);
