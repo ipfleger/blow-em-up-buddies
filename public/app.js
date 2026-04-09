@@ -611,7 +611,7 @@ window.updateGame = function(serverState) {
             const teamColor = flag.team === 1 ? '#b4d455' : '#ff3366';
             let status, icon;
             if (flag.carrierId) {
-                const carrierName = flag.carrierId === window.myCurrentTankId ? 'YOU' : flag.carrierId;
+            const carrierName = flag.carrierId === window.myCurrentTankId ? 'YOU' : `T${flag.carrierId.replace('tank', '')}`;
                 status = `⚡ CARRIED BY ${carrierName}`;
                 icon = '🚩';
             } else {

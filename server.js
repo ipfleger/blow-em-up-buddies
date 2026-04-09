@@ -199,6 +199,8 @@ io.on('connection', (socket) => {
     socket.on('update-garage', (tankId, role, state) => {
         if(!currentRoom || !activeLobbies[currentRoom]) return;
         let lobby = activeLobbies[currentRoom];
+        // Validate tankId format (must be tank1 through tank6)
+        if (!/^tank[1-6]$/.test(tankId)) return;
         // Verify this socket is actually seated in this tank
         let seated = lobby.slots[`${tankId}_driver`] === socket.id || lobby.slots[`${tankId}_gunner`] === socket.id;
         if (!seated) return;

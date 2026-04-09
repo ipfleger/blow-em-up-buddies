@@ -57,7 +57,8 @@ class ServerTank {
         this.currentSpeed = 0;
         this.hullRotation = this.team === 1 ? -Math.PI/2 : Math.PI/2;
         this.turretYaw = this.hullRotation;
-        this.turretPitch = 0;        this.boost = CONFIG.maxBoost;
+        this.turretPitch = 0;
+        this.boost = CONFIG.maxBoost;
         this.health = 100;
         this.isGrounded = false;
         this.bombCooldown = 0;
