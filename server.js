@@ -58,8 +58,8 @@ io.on('connection', (socket) => {
 
     socket.on('host-game', (data) => {
         const rawName = typeof data === 'string' ? data : data.name;
-        // Sanitize gamertag: strip HTML tags, trim whitespace, limit to 20 chars
-        const playerName = String(rawName || '').replace(/<[^>]*>/g, '').trim().substring(0, 20).toUpperCase();
+        // Sanitize gamertag: only allow alphanumeric, spaces, underscores, hyphens; limit to 20 chars
+        const playerName = String(rawName || '').replace(/[^A-Za-z0-9 _\-]/g, '').trim().substring(0, 20).toUpperCase();
         const maxTanks = data.maxTanks || 6;
         const mapName = data.map || 'bowl';
         const modeName = data.mode || 'FFA';
@@ -102,8 +102,8 @@ io.on('connection', (socket) => {
 
     socket.on('join-game', (data) => {
         const code = data.code;
-        // Sanitize name: strip HTML tags, trim, limit length
-        const name = String(data.name || '').replace(/<[^>]*>/g, '').trim().substring(0, 20).toUpperCase();
+        // Sanitize name: only allow alphanumeric, spaces, underscores, hyphens; limit to 20 chars
+        const name = String(data.name || '').replace(/[^A-Za-z0-9 _\-]/g, '').trim().substring(0, 20).toUpperCase();
         if (activeRooms.has(code) && activeLobbies[code]) {
             currentRoom = code;
             socket.join(currentRoom);

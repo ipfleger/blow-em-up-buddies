@@ -17,7 +17,8 @@ window.Graphics = {
     // --- MATERIAL POOL ---
     _matPool: {},
     _getMaterial: function(color) {
-        const key = typeof color === 'number' ? color : parseInt(String(color).replace('#','0x'));
+        const key = typeof color === 'number' ? color : parseInt(String(color).replace(/^#/, ''), 16);
+        if (!isFinite(key)) return new THREE.MeshBasicMaterial({ color: 0xffffff });
         if (!this._matPool[key]) {
             this._matPool[key] = new THREE.MeshBasicMaterial({ color: key });
         }
