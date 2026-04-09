@@ -251,19 +251,40 @@ window.Controls = {
             if (this.keys['KeyW']) this.input.moveY = -1; else if (this.keys['KeyS']) this.input.moveY = 1; else if (!this.touchId) this.input.moveY = 0;
             if (this.keys['KeyA']) this.input.moveX = -1; else if (this.keys['KeyD']) this.input.moveX = 1; else if (!this.touchId) this.input.moveX = 0;
 
+            const wasBoosting = this._audioBoostWas || false;
             this.input.isBoosting = Boolean(this.touchBtns.boost || this.keys['ShiftLeft'] || this.keys['ShiftRight']);
+            if (this.input.isBoosting && !wasBoosting && window.AudioManager) window.AudioManager.sounds.boostStart();
+            if (!this.input.isBoosting && wasBoosting && window.AudioManager) window.AudioManager.sounds.boostStop();
+            this._audioBoostWas = this.input.isBoosting;
+
             this.input.holdingJump = Boolean(this.touchBtns.jump || this.keys['Space']);
-            if (this.touchBtns.jump || this.keys['Space']) { this.input.triggerJump = true; this.keys['Space'] = false; this.touchBtns.jump = false;}
+            if (this.touchBtns.jump || this.keys['Space']) {
+                this.input.triggerJump = true; this.keys['Space'] = false; this.touchBtns.jump = false;
+                if (window.AudioManager) window.AudioManager.sounds.jump();
+            }
         }
 
         if (window.myCurrentRole === 'gunner' || window.myCurrentRole === 'spectator') {
             if (this.keys['ArrowUp']) this.aimJoystick.y = -1; else if (this.keys['ArrowDown']) this.aimJoystick.y = 1; else if (!this.touchId && window.myCurrentRole!=='spectator') this.aimJoystick.y = 0;
             if (this.keys['ArrowLeft']) this.aimJoystick.x = -1; else if (this.keys['ArrowRight']) this.aimJoystick.x = 1; else if (!this.touchId && window.myCurrentRole!=='spectator') this.aimJoystick.x = 0;
 
+            const prevFiring = this._audioFiringWas || false;
             this.input.isFiring = this.touchBtns.boost || this.keys['Space'];
+            if (this.input.isFiring && !prevFiring && window.AudioManager) {
+                const now = Date.now();
+                if (!this._lastConcussiveSnd || now - this._lastConcussiveSnd > 1150) {
+                    this._lastConcussiveSnd = now;
+                    window.AudioManager.sounds.concussiveFire();
+                }
+            }
+            this._audioFiringWas = this.input.isFiring;
 
             // Allow holding down the secondary action
+            const prevRapid = this._audioRapidWas || false;
             this.input.triggerSecondary = Boolean(this.touchBtns.jump || this.keys['ShiftLeft'] || this.keys['ShiftRight']);
+            if (this.input.triggerSecondary && !prevRapid && window.AudioManager) window.AudioManager.sounds.rapidFireStart();
+            if (!this.input.triggerSecondary && prevRapid && window.AudioManager) window.AudioManager.sounds.rapidFireStop();
+            this._audioRapidWas = this.input.triggerSecondary;
 
             if (this.keys['KeyE']) {
                 this.input.switchAbility = true; this.keys['KeyE'] = false;
