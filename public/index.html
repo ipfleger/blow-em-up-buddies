@@ -146,12 +146,68 @@
         <!-- Damage numbers container -->
         <div id="dmg-numbers" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:200;"></div>
 
+        <!-- Match Timer HUD -->
+        <div id="match-timer" class="hidden" style="position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:110;pointer-events:none;"></div>
+
+        <!-- Kill feed container -->
+        <div id="kill-feed" class="hidden" style="position:fixed;top:50px;right:12px;z-index:110;pointer-events:none;min-width:160px;"></div>
+
+        <!-- Role callout overlay -->
+        <div id="role-callout" class="hidden"></div>
+
+        <!-- Respawn countdown overlay -->
+        <div id="respawn-overlay" class="hidden"></div>
+
+        <!-- Scoreboard overlay (shown while TAB held) -->
+        <div id="scoreboard-overlay" class="hidden"></div>
+
+        <!-- End-of-match overlay -->
+        <div id="end-screen" class="hidden"></div>
+
+        <!-- Tutorial overlay -->
+        <div id="tutorial-overlay" class="hidden">
+            <div class="tutorial-card">
+                <div id="tutorial-panel-1" class="tutorial-panel">
+                    <div class="tutorial-icon">🎮</div>
+                    <h2>DRIVER</h2>
+                    <p>Use the joystick to move. Hold <strong>A</strong> to Boost — go fast and ram enemies! Double-tap jump to dodge in the air.</p>
+                </div>
+                <div id="tutorial-panel-2" class="tutorial-panel hidden">
+                    <div class="tutorial-icon">🎯</div>
+                    <h2>GUNNER</h2>
+                    <p>Aim with the right joystick. <strong>A</strong> = Concussive Blast. <strong>B</strong> = Rapid Fire (watch the overheat ring!)</p>
+                </div>
+                <div id="tutorial-panel-3" class="tutorial-panel hidden">
+                    <div class="tutorial-icon">🚩</div>
+                    <h2>CTF MODE</h2>
+                    <p>Grab the enemy flag and return it to your base to score! Protect your own flag.</p>
+                </div>
+                <div class="tutorial-footer">
+                    <div id="tutorial-dots" class="tutorial-dots">
+                        <span class="dot active"></span><span class="dot"></span><span class="dot"></span>
+                    </div>
+                    <button id="btn-tutorial-next" class="primary-btn" style="width:auto;padding:10px 24px;">NEXT</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Portrait lock overlay -->
+        <div id="portrait-lock">
+            <div style="font-size:3rem;margin-bottom:16px;">🔄</div>
+            <div style="font-size:1.2rem;font-weight:bold;color:var(--neon-cyan);margin-bottom:8px;">ROTATE YOUR DEVICE</div>
+            <div style="color:rgba(255,255,255,0.6);font-size:0.9rem;">This game requires landscape orientation</div>
+        </div>
+
         <!-- Settings overlay -->
         <div id="settings-overlay" class="screen interactive hidden" style="z-index:500;">
             <div class="menu-card settings-card">
                 <div class="settings-header">
                     <h3 class="settings-title">SETTINGS</h3>
                     <button class="icon-btn" id="btn-close-settings"><i class="ph ph-x"></i></button>
+                </div>
+                <div class="settings-row">
+                    <label for="slider-sensitivity">AIM SENSITIVITY <span id="lbl-sensitivity">1.0x</span></label>
+                    <input type="range" id="slider-sensitivity" class="volume-slider" min="0.5" max="3.0" step="0.1" value="1.0">
                 </div>
                 <div class="settings-row">
                     <label for="slider-volume">MASTER VOLUME</label>
@@ -161,6 +217,19 @@
                         <i class="ph ph-speaker-high volume-icon"></i>
                     </div>
                 </div>
+                <div class="settings-row">
+                    <label for="select-quality">GRAPHICS QUALITY</label>
+                    <select id="select-quality" class="settings-select">
+                        <option value="low">Low</option>
+                        <option value="medium" selected>Medium</option>
+                        <option value="high">High</option>
+                    </select>
+                </div>
+                <div class="settings-row settings-row-checkbox">
+                    <label for="chk-ar">AR / MOTION AIM</label>
+                    <input type="checkbox" id="chk-ar" class="settings-checkbox">
+                </div>
+                <button id="btn-settings-reset" class="secondary-btn mt-10" style="width:100%;">RESET TO DEFAULTS</button>
             </div>
         </div>
     </div>
@@ -169,6 +238,7 @@
     <script src="/environment.js"></script>
     <script src="/maps.js"></script>
     <script src="/tank-factory.js"></script>
+    <script src="/settings.js"></script>
     <script src="/lobby.js"></script>
     <script src="/graphics.js"></script>
     <script src="/controls.js"></script>

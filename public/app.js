@@ -34,6 +34,14 @@ window.deathCamTimer = 0;
 window.deathCamPos = null;
 window.deathCamTarget = null;
 
+// Kill feed state
+window._killFeedEntries = [];
+window._crosshairFrameCount = 0;
+
+// Reusable raycaster for crosshair (avoid per-frame allocation)
+window._reusableRaycaster = new THREE.Raycaster();
+window._reusableVec2 = new THREE.Vector2(0, 0);
+
 const pingGeo = new THREE.CylinderGeometry(1.5, 1.5, 60, 8); pingGeo.translate(0, 30, 0);
 const bulletGeo = new THREE.CylinderGeometry(0.5, 0.5, 10.0, 8); bulletGeo.rotateX(Math.PI / 2);
 const bulletMat = new THREE.MeshBasicMaterial({color: 0x6dcbc3});
@@ -117,6 +125,19 @@ window.onLaunchGame = function(mapName) {
     document.getElementById('lobby-screen').classList.add('hidden');
     for (let tId in window.lobbyTanks) { window.destroyLobbyTank(tId); }
 
+    // Reset kill feed tracking
+    window._lastKillFeedCount = 0;
+    window._killFeedEntries = [];
+    const feedEl = document.getElementById('kill-feed');
+    if (feedEl) feedEl.innerHTML = '';
+
+    // Ensure invuln flash element exists
+    if (!document.getElementById('invuln-flash')) {
+        const inv = document.createElement('div');
+        inv.id = 'invuln-flash';
+        document.body.appendChild(inv);
+    }
+
     if (window.isSpectating) {
         document.getElementById('crosshair').classList.add('hidden');
     } else {
@@ -125,6 +146,31 @@ window.onLaunchGame = function(mapName) {
 
     window.Graphics.rebuildMapGeometry(window.currentMapName);
     window.Graphics.loadEnvironmentProps(window.currentMapName);
+
+    // Role callout — shown every match start
+    setTimeout(() => {
+        if (window.myCurrentRole && window.myCurrentRole !== 'spectator') {
+            const callout = document.getElementById('role-callout');
+            if (callout) {
+                callout.textContent = window.myCurrentRole === 'driver' ? 'YOU ARE THE DRIVER' : 'YOU ARE THE GUNNER';
+                callout.classList.remove('hidden');
+                callout.style.animation = 'none';
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(() => {
+                        callout.style.animation = '';
+                    });
+                });
+                setTimeout(() => callout.classList.add('hidden'), 2100);
+            }
+        }
+    }, 300);
+
+    // Tutorial — shown on first match only
+    const hasSeenTutorial = localStorage.getItem('hasSeenTutorial');
+    if (!hasSeenTutorial) {
+        const tutOverlay = document.getElementById('tutorial-overlay');
+        if (tutOverlay) tutOverlay.classList.remove('hidden');
+    }
 };
 
 window.spawnVisualPing = function(x, y, z, type, ownerId) {
@@ -196,11 +242,20 @@ window.updateGame = function(serverState) {
         if (sp.isDead && !tank.wasDead) {
             window.Graphics.createShatterParticles(tank.position);
             tank.turretRef.visible = false;
-            // Death cam for own tank
+            // Death cam for own tank — try to follow killer if known
             if (tId === window.myCurrentTankId) {
                 window.deathCamTimer = 2.0;
-                window.deathCamPos = tank.position.clone().add(new THREE.Vector3(0, 40, 30));
-                window.deathCamTarget = tank.position.clone();
+                const killerTank = sp.lastKiller && window.visualTanks[sp.lastKiller] ? window.visualTanks[sp.lastKiller] : null;
+                if (killerTank) {
+                    window.deathCamKillerId = sp.lastKiller;
+                    window.deathCamPos = killerTank.position.clone().add(new THREE.Vector3(0, 40, 30));
+                    window.deathCamTarget = killerTank.position.clone();
+                } else {
+                    window.deathCamKillerId = null;
+                    window.deathCamPos = tank.position.clone().add(new THREE.Vector3(0, 40, 30));
+                    window.deathCamTarget = tank.position.clone();
+                }
+                window._respawnCountdown = 3.0;
             }
             // Audio: tank death / kill confirmation
             if (window.AudioManager) {
@@ -214,6 +269,18 @@ window.updateGame = function(serverState) {
                 }
             }
         }
+
+        // Invulnerability flash when just respawned
+        if (!sp.isDead && tank.wasDead) {
+            if (tId === window.myCurrentTankId) {
+                const inv = document.getElementById('invuln-flash');
+                if (inv) {
+                    inv.classList.add('active');
+                    setTimeout(() => inv.classList.remove('active'), 1500);
+                }
+            }
+        }
+
         tank.wasDead = sp.isDead; tank.visible = !sp.isDead;
         if (!sp.isDead) tank.turretRef.visible = true;
 
@@ -423,11 +490,16 @@ window.updateGame = function(serverState) {
             if (dmg > 10 && !sp.isDead) {
                 window.shakeTimer = 0.3;
                 window.shakeIntensity = Math.min(3.0, dmg * 0.05);
+                // Chromatic aberration on heavy damage
+                if (dmg > 20) window._chromaticTimer = 0.4;
             }
             window._prevHealth = sp.health;
             if (sp.isDead) window._prevHealth = 100;
         }
     }
+
+    // Cache last state for scoreboard
+    window._lastServerState = serverState;
 
     if (serverState.shutters) {
         serverState.shutters.forEach(s => {
@@ -506,6 +578,91 @@ window.updateGame = function(serverState) {
     } else {
         const scoreEl = document.getElementById('ctf-scores');
         if (scoreEl) scoreEl.remove();
+    }
+
+    // --- MATCH TIMER HUD ---
+    if (window.isMatchActive) {
+        const timerEl = document.getElementById('match-timer');
+        if (timerEl) {
+            if (serverState.matchTimer !== undefined) {
+                const t = Math.max(0, serverState.matchTimer);
+                const mins = Math.floor(t / 60);
+                const secs = Math.floor(t % 60);
+                timerEl.textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
+                timerEl.classList.remove('hidden');
+                if (t <= 30) timerEl.classList.add('timer-low');
+                else timerEl.classList.remove('timer-low');
+            }
+        }
+    }
+
+    // --- KILL FEED ---
+    if (serverState.killFeed && serverState.killFeed.length > 0) {
+        const feedEl = document.getElementById('kill-feed');
+        if (feedEl && window.isMatchActive) {
+            feedEl.classList.remove('hidden');
+            const now = Date.now();
+            // Add new entries
+            const lastSeen = window._lastKillFeedCount || 0;
+            if (serverState.killFeed.length > lastSeen) {
+                for (let ki = lastSeen; ki < serverState.killFeed.length; ki++) {
+                    const kf = serverState.killFeed[ki];
+                    const weaponIcon = kf.weapon === 'concussive' ? '💥' : kf.weapon === 'rapid' ? '🔫' : '🚗';
+                    const entry = document.createElement('div');
+                    entry.className = 'kill-feed-entry';
+                    entry.textContent = `${kf.killer} ${weaponIcon} ${kf.victim}`;
+                    feedEl.appendChild(entry);
+                    window._killFeedEntries.push({ el: entry, born: now });
+                    // Keep max 5
+                    while (feedEl.children.length > 5) feedEl.removeChild(feedEl.firstChild);
+                }
+            }
+            window._lastKillFeedCount = serverState.killFeed.length;
+            // Fade out old entries
+            window._killFeedEntries = window._killFeedEntries.filter(fe => {
+                const age = (now - fe.born) / 1000;
+                if (age > 3) { fe.el.remove(); return false; }
+                fe.el.style.opacity = Math.max(0, 1 - (age - 2.5) / 0.5);
+                return true;
+            });
+        }
+    }
+
+    // --- END-OF-MATCH OVERLAY ---
+    if (serverState.matchOver) {
+        const endEl = document.getElementById('end-screen');
+        if (endEl && endEl.classList.contains('hidden')) {
+            endEl.classList.remove('hidden');
+            // Determine winner
+            let winText = 'TIME UP!';
+            let subText = '';
+            if (serverState.mode === 'CTF' && serverState.scores) {
+                const s1 = serverState.scores[1] || 0;
+                const s2 = serverState.scores[2] || 0;
+                if (s1 > s2) { winText = '🟢 TEAM 1 WINS'; subText = `${s1} — ${s2}`; }
+                else if (s2 > s1) { winText = '🔴 TEAM 2 WINS'; subText = `${s1} — ${s2}`; }
+                else { winText = 'DRAW!'; subText = `${s1} — ${s2}`; }
+            }
+            // Build stats table
+            let statsRows = '';
+            if (serverState.killStats) {
+                const sorted = Object.entries(serverState.killStats).sort((a, b) => b[1].kills - a[1].kills);
+                sorted.forEach(([tid, stat]) => {
+                    const isMine = (tid === window.myCurrentTankId);
+                    statsRows += `<tr class="${isMine ? 'highlight' : ''}"><td>${tid}</td><td>${stat.kills}</td><td>${stat.deaths}</td></tr>`;
+                });
+            }
+            endEl.innerHTML = `
+                <div class="end-card interactive">
+                    <div class="end-title">${winText}</div>
+                    <div class="end-subtitle">${subText || 'MATCH COMPLETE'}</div>
+                    <div class="end-stats">
+                        <table><thead><tr><th>TANK</th><th>KILLS</th><th>DEATHS</th></tr></thead>
+                        <tbody>${statsRows}</tbody></table>
+                    </div>
+                    <button onclick="window.location.reload()" class="primary-btn" style="touch-action:manipulation;">RETURN TO LOBBY</button>
+                </div>`;
+        }
     }
 };
 
@@ -617,15 +774,41 @@ function animate() {
             else { p.mesh.scale.y = Math.max(0, p.life / 4.0); }
         }
 
+        // --- RESPAWN COUNTDOWN ---
+        if (window._respawnCountdown > 0) {
+            window._respawnCountdown -= delta;
+            const respawnEl = document.getElementById('respawn-overlay');
+            if (respawnEl) {
+                const secs = Math.ceil(window._respawnCountdown);
+                respawnEl.textContent = `RESPAWNING IN ${secs}...`;
+                respawnEl.classList.remove('hidden');
+            }
+        } else {
+            const respawnEl = document.getElementById('respawn-overlay');
+            if (respawnEl && !respawnEl.classList.contains('hidden')) respawnEl.classList.add('hidden');
+        }
+
         // --- DEATH CAM (3g) ---
         if (window.deathCamTimer > 0) {
             window.deathCamTimer -= delta;
+            // Follow killer tank if known
+            if (window.deathCamKillerId && window.visualTanks[window.deathCamKillerId]) {
+                const killerPos = window.visualTanks[window.deathCamKillerId].position;
+                window.deathCamPos = killerPos.clone().add(new THREE.Vector3(0, 40, 30));
+                window.deathCamTarget = killerPos.clone();
+            }
             if (window.deathCamPos && window.deathCamTarget) {
                 window.Graphics.camera.position.lerp(window.deathCamPos, 8 * delta);
                 window.Graphics.camera.lookAt(window.deathCamTarget);
             }
+            // Allow aim joystick to orbit during death
+            if (window.Controls) {
+                window._deathCamOrbit = window._deathCamOrbit || 0;
+                window._deathCamOrbit += window.Controls.aimJoystick.x * 2 * delta;
+            }
             if (window.deathCamTimer <= 0) {
                 window.deathCamPos = null; window.deathCamTarget = null;
+                window.deathCamKillerId = null; window._deathCamOrbit = 0;
             }
         } else {
             for (let tId in window.visualTanks) {
@@ -683,15 +866,57 @@ function animate() {
                     crosshair.style.transform = 'translate(-50%, -50%) scale(0.6) rotate(45deg)'; crosshair.style.borderRadius = '4px';
                 } else {
                     crosshair.style.transform = 'translate(-50%, -50%) scale(1.0) rotate(0deg)'; crosshair.style.borderRadius = '50%';
-                    const raycaster = new THREE.Raycaster(); raycaster.setFromCamera(new THREE.Vector2(0, 0), window.Graphics.camera);
-                    const intersects = raycaster.intersectObjects(window.Graphics.matchGroup.children, true); let hitObstacle = false;
-                    for (let i = 0; i < intersects.length; i++) {
-                        let obj = intersects[i].object; if (!obj.visible || (obj.parent && !obj.parent.visible)) continue;
-                        if (obj.userData && obj.userData.type === 'obstacle') { hitObstacle = true; break; } else if (obj.userData && obj.userData.type === 'floor') break;
+                    // Throttle raycasting to every 3rd frame
+                    window._crosshairFrameCount = (window._crosshairFrameCount || 0) + 1;
+                    if (window._crosshairFrameCount % 3 === 0) {
+                        window._reusableRaycaster.setFromCamera(window._reusableVec2, window.Graphics.camera);
+                        const intersects = window._reusableRaycaster.intersectObjects(window.Graphics.matchGroup.children, true);
+                        let hitObstacle = false;
+                        for (let i = 0; i < intersects.length; i++) {
+                            let obj = intersects[i].object; if (!obj.visible || (obj.parent && !obj.parent.visible)) continue;
+                            if (obj.userData && obj.userData.type === 'obstacle') { hitObstacle = true; break; } else if (obj.userData && obj.userData.type === 'floor') break;
+                        }
+                        window._crosshairHitObstacle = hitObstacle;
                     }
-                    if (hitObstacle) { crosshair.style.borderColor = 'rgba(255, 140, 0, 0.9)'; crosshair.style.backgroundColor = 'rgba(255, 140, 0, 0.2)'; }
+                    if (window._crosshairHitObstacle) { crosshair.style.borderColor = 'rgba(255, 140, 0, 0.9)'; crosshair.style.backgroundColor = 'rgba(255, 140, 0, 0.2)'; }
                     else { crosshair.style.borderColor = 'rgba(180, 212, 85, 0.5)'; crosshair.style.backgroundColor = 'transparent'; }
                 }
+            }
+        }
+
+        // --- SCREEN SPACE EFFECTS ---
+        const canvas = window.Graphics.renderer.domElement;
+        // Motion blur during boost
+        const myTankData = window.visualTanks[window.myCurrentTankId];
+        const isBoosting = myTankData && myTankData.lastNetPos && window.myCurrentRole === 'driver' &&
+            window.Controls && window.Controls.input.isBoosting;
+        canvas.style.filter = isBoosting ? 'blur(1px)' : '';
+
+        // Chromatic aberration on heavy damage
+        if (window._chromaticTimer > 0) {
+            window._chromaticTimer -= delta;
+            const t = window._chromaticTimer / 0.4;
+            canvas.style.filter = `url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg'><filter id='c'><feColorMatrix type='matrix' values='1 0 0 0 ${t*0.04} 0 1 0 0 0 0 0 1 0 0 0 0 0 1 0'/></filter></svg>#c")`;
+        } else if (!isBoosting) {
+            canvas.style.filter = '';
+        }
+
+        // --- SCOREBOARD (TAB key) ---
+        const showScoreboard = window.Controls && window.Controls.keys && window.Controls.keys['Tab'];
+        const scoreboardEl = document.getElementById('scoreboard-overlay');
+        if (scoreboardEl) {
+            if (showScoreboard && window._lastServerState && window._lastServerState.killStats) {
+                if (scoreboardEl.classList.contains('hidden')) {
+                    scoreboardEl.classList.remove('hidden');
+                    const ks = window._lastServerState.killStats;
+                    const sorted = Object.entries(ks).sort((a, b) => b[1].kills - a[1].kills);
+                    let rows = sorted.map(([tid, s]) =>
+                        `<tr class="${tid === window.myCurrentTankId ? 'scoreboard-myrow' : ''}"><td>${tid}</td><td>${s.kills}</td><td>${s.deaths}</td></tr>`
+                    ).join('');
+                    scoreboardEl.innerHTML = `<h3>SCOREBOARD</h3><table class="scoreboard-table"><thead><tr><th>TANK</th><th>K</th><th>D</th></tr></thead><tbody>${rows}</tbody></table>`;
+                }
+            } else {
+                if (!scoreboardEl.classList.contains('hidden')) scoreboardEl.classList.add('hidden');
             }
         }
     }

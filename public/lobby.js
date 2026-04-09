@@ -364,11 +364,13 @@ window.socket.on('lobby-update', (lobby) => {
     const overlay = document.getElementById('settings-overlay');
     const btnOpen = document.getElementById('btn-open-settings');
     const btnClose = document.getElementById('btn-close-settings');
-    const slider = document.getElementById('slider-volume');
 
-    if (overlay && btnOpen && btnClose && slider) {
+    if (overlay && btnOpen && btnClose) {
         btnOpen.addEventListener('click', () => {
-            if (window.AudioManager) slider.value = window.AudioManager.getVolume();
+            // Sync values from AudioManager
+            const slider = document.getElementById('slider-volume');
+            if (slider && window.AudioManager) slider.value = window.AudioManager.getVolume();
+            if (window.GameSettings) window.GameSettings.syncUI();
             overlay.classList.remove('hidden');
         });
         btnClose.addEventListener('click', () => {
@@ -379,8 +381,45 @@ window.socket.on('lobby-update', (lobby) => {
             if (e.target === overlay) overlay.classList.add('hidden');
         });
         // Update volume live
-        slider.addEventListener('input', () => {
-            if (window.AudioManager) window.AudioManager.setVolume(slider.value);
+        const slider = document.getElementById('slider-volume');
+        if (slider) {
+            slider.addEventListener('input', () => {
+                if (window.AudioManager) window.AudioManager.setVolume(slider.value);
+            });
+        }
+    }
+}());
+
+// --- TUTORIAL LOGIC ---
+(function() {
+    let panelIdx = 0;
+    const panels = ['tutorial-panel-1', 'tutorial-panel-2', 'tutorial-panel-3'];
+    const dots = document.querySelectorAll('#tutorial-dots .dot');
+    const btnNext = document.getElementById('btn-tutorial-next');
+    const tutOverlay = document.getElementById('tutorial-overlay');
+
+    function showPanel(idx) {
+        panels.forEach((id, i) => {
+            const el = document.getElementById(id);
+            if (el) el.classList.toggle('hidden', i !== idx);
+        });
+        dots.forEach((d, i) => d.classList.toggle('active', i === idx));
+        if (btnNext) btnNext.textContent = (idx >= panels.length - 1) ? 'GOT IT!' : 'NEXT';
+    }
+
+    if (btnNext) {
+        btnNext.addEventListener('click', () => {
+            panelIdx++;
+            if (panelIdx >= panels.length) {
+                if (tutOverlay) tutOverlay.classList.add('hidden');
+                try { localStorage.setItem('hasSeenTutorial', '1'); } catch(e) {}
+                panelIdx = 0;
+                showPanel(0);
+            } else {
+                showPanel(panelIdx);
+            }
         });
     }
+
+    showPanel(0);
 }());

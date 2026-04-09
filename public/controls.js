@@ -5,6 +5,7 @@ window.Controls = {
     aimJoystick: { x: 0, y: 0 },
     keys: {}, touchBtns: { boost: false, jump: false, swap: false },
     specCam: { x: 0, y: 80, z: 0, yaw: 0, pitch: -Math.PI/4 },
+    sensitivityMultiplier: 1.0,
 
     useAR: false,
     arInitDone: false,
@@ -166,7 +167,8 @@ window.Controls = {
                     if (window.myCurrentRole === 'driver') { this.input.moveX = dx / 40; this.input.moveY = dy / 40; }
                     else if (window.myCurrentRole === 'gunner') {
                         // Joystick always available for aiming (supplementary when AR enabled)
-                        this.aimJoystick.x = dx / 40; this.aimJoystick.y = dy / 40;
+                        this.aimJoystick.x = (dx / 40) * (this.sensitivityMultiplier || 1.0);
+                        this.aimJoystick.y = (dy / 40) * (this.sensitivityMultiplier || 1.0);
                     }
                     else if (window.myCurrentRole === 'spectator') { this.input.moveX = dx / 40; this.input.moveY = dy / 40; }
                 } else if (window.myCurrentRole === 'gunner' && this.useAR) {
@@ -265,8 +267,9 @@ window.Controls = {
         }
 
         if (window.myCurrentRole === 'gunner' || window.myCurrentRole === 'spectator') {
-            if (this.keys['ArrowUp']) this.aimJoystick.y = -1; else if (this.keys['ArrowDown']) this.aimJoystick.y = 1; else if (!this.touchId && window.myCurrentRole!=='spectator') this.aimJoystick.y = 0;
-            if (this.keys['ArrowLeft']) this.aimJoystick.x = -1; else if (this.keys['ArrowRight']) this.aimJoystick.x = 1; else if (!this.touchId && window.myCurrentRole!=='spectator') this.aimJoystick.x = 0;
+            const sens = this.sensitivityMultiplier || 1.0;
+            if (this.keys['ArrowUp']) this.aimJoystick.y = -1 * sens; else if (this.keys['ArrowDown']) this.aimJoystick.y = 1 * sens; else if (!this.touchId && window.myCurrentRole!=='spectator') this.aimJoystick.y = 0;
+            if (this.keys['ArrowLeft']) this.aimJoystick.x = -1 * sens; else if (this.keys['ArrowRight']) this.aimJoystick.x = 1 * sens; else if (!this.touchId && window.myCurrentRole!=='spectator') this.aimJoystick.x = 0;
 
             const prevFiring = this._audioFiringWas || false;
             this.input.isFiring = this.touchBtns.boost || this.keys['Space'];

@@ -8,10 +8,15 @@ const trunc2 = (val) => Math.round(val * 100) / 100;
 const trunc1 = (val) => Math.round(val * 10) / 10;
 
 class Match {
-    constructor(roomId, configs, mode, mapName) {
+    constructor(roomId, configs, mode, mapName, matchDuration) {
         this.roomId = roomId;
         this.mode = mode || 'FFA';
         this.mapName = mapName || 'bowl';
+
+        this.matchTimer = matchDuration || 300;
+        this.matchOver = false;
+        this.killStats = {};
+        this.killFeed = [];
 
         this.tanks = {};
         if (configs) {
@@ -23,6 +28,7 @@ class Match {
                 let slotIndex = i % 3;
 
                 this.tanks[tId] = new ServerTank(tId, configs[tId], this.mapName, team, slotIndex);
+                this.killStats[tId] = { kills: 0, deaths: 0 };
                 i++;
             }
         }
@@ -77,18 +83,23 @@ class Match {
     applyInput(socketId, input) {
         const mapping = this.playerMapping[socketId];
         if (mapping && mapping.role === 'spectator') return;
+        if (!input || typeof input !== 'object') return;
 
         if (mapping && this.tanks[mapping.tankId]) {
             const tank = this.tanks[mapping.tankId];
             if (mapping.role === 'driver') {
-                tank.driverInputs.moveX = Math.max(-1, Math.min(1, +input.moveX || 0));
-                tank.driverInputs.moveY = Math.max(-1, Math.min(1, +input.moveY || 0));
+                const mx = +input.moveX; const my = +input.moveY;
+                if (!isFinite(mx) || !isFinite(my)) return;
+                tank.driverInputs.moveX = Math.max(-1, Math.min(1, mx || 0));
+                tank.driverInputs.moveY = Math.max(-1, Math.min(1, my || 0));
                 tank.driverInputs.isBoosting = Boolean(input.isBoosting);
                 tank.driverInputs.holdingJump = Boolean(input.holdingJump);
-                if (input.triggerJump) tank.driverInputs.triggerJump = true;
+                if (input.triggerJump === true) tank.driverInputs.triggerJump = true;
             } else if (mapping.role === 'gunner') {
-                tank.gunnerInputs.aimYaw = +input.aimYaw || 0;
-                tank.gunnerInputs.aimPitch = Math.max(-Math.PI/2, Math.min(Math.PI/2, +input.aimPitch || 0));
+                const ay = +input.aimYaw; const ap = +input.aimPitch;
+                if (!isFinite(ay) || !isFinite(ap)) return;
+                tank.gunnerInputs.aimYaw = Math.max(-Math.PI * 2, Math.min(Math.PI * 2, ay || 0));
+                tank.gunnerInputs.aimPitch = Math.max(-Math.PI/2, Math.min(Math.PI/2, ap || 0));
                 tank.gunnerInputs.isFiring = Boolean(input.isFiring);
                 tank.gunnerInputs.triggerSecondary = Boolean(input.triggerSecondary);
             }
@@ -108,11 +119,46 @@ class Match {
         const state = { tanks: {}, assignments: this.playerMapping, mode: this.mode, map: this.mapName };
         const tankIds = Object.keys(this.tanks);
 
+        // --- MATCH TIMER ---
+        if (!this.matchOver) {
+            this.matchTimer -= delta;
+            if (this.matchTimer <= 0) {
+                this.matchTimer = 0;
+                this.matchOver = true;
+            }
+        }
+
+        // Check CTF win condition
+        if (this.mode === 'CTF' && this.scores) {
+            if (this.scores[1] >= 3 || this.scores[2] >= 3) this.matchOver = true;
+        }
+
+        state.matchTimer = trunc1(this.matchTimer);
+        state.matchOver = this.matchOver;
+        state.killStats = this.killStats;
+        state.killFeed = this.killFeed.slice(-5);
+
         this.explosions = [];
         this.hits = [];
 
+        // When match is over, don't process further game logic
+        if (this.matchOver) {
+            for (let id of tankIds) state.tanks[id] = this.tanks[id].getNetworkState();
+            state.bullets = [];
+            state.blastZones = [];
+            state.hits = [];
+            state.shutters = this.shutters;
+            if (this.mode === 'CTF' && this.flags) {
+                state.flags = this.flags.map(f => ({ team: f.team, x: trunc1(f.x), y: trunc1(f.y), z: trunc1(f.z), homeX: f.homeX, homeY: f.homeY, homeZ: f.homeZ, carrierId: f.carrierId }));
+                state.scores = { 1: this.scores[1], 2: this.scores[2] };
+            }
+            return state;
+        }
+
         for (let id of tankIds) {
             let t = this.tanks[id];
+            // Pass CTF flag state to tank for bot AI
+            if (this.mode === 'CTF' && this.flags) t._ctfFlags = this.flags;
             t.update(delta, this.tanks, this.mode, this.shutters);
 
             let barrelBaseY = t.position.y + 2.2 + t.actualTurretYOffset;
@@ -197,9 +243,14 @@ class Match {
                         this.blastZones.push({ x: cX, y: cY, z: cZ, life: 1.2, owner: b.owner, hasPulsed: false });
                     } else if (b.type === 'rapid') {
                         let isTeammate = ((this.mode === '3v3' || this.mode === 'CTF') && this.getTeam(tId) === this.getTeam(b.owner));
-                        if (!isTeammate && target.dodgeInvulnTimer <= 0) {
-                            target.health -= 6;
-                            if (target.health <= 0) target.die();
+                        if (!isTeammate && target.dodgeInvulnTimer <= 0 && target.respawnInvuln <= 0) {
+                            const dmg = 9;
+                            target.health -= dmg;
+                            this.hits.push({ x: trunc2(cX), y: trunc2(cY), z: trunc2(cZ), owner: b.owner, targetId: tId, damage: dmg });
+                            if (target.health <= 0) {
+                                target.die(b.owner);
+                                this._recordKill(b.owner, tId, 'rapid');
+                            }
                         }
                     }
                     break;
@@ -264,9 +315,13 @@ class Match {
                         target.isGrounded = false;
 
                         let isTeammate = ((this.mode === '3v3' || this.mode === 'CTF') && this.getTeam(tId) === this.getTeam(z.owner));
-                        if (!isTeammate) {
-                            target.health -= 95 * intensity;
-                            if (target.health <= 0) target.die();
+                        if (!isTeammate && target.respawnInvuln <= 0) {
+                            const dmg = 65 * intensity;
+                            target.health -= dmg;
+                            if (target.health <= 0) {
+                                target.die(z.owner);
+                                this._recordKill(z.owner, tId, 'concussive');
+                            }
                         }
                     } else {
                         target.velocity.x += pushDirX * 1.5 * delta;
@@ -303,20 +358,30 @@ class Match {
                         let angleDot = t1X * t2X + t1Z * t2Z;
 
                         if (p1Ramming && p2Ramming && angleDot < -0.5) {
-                            if (!isTeammate) { p1.health -= 50; p2.health -= 50; }
-                            if (p1.health <= 0) p1.die(); if (p2.health <= 0) p2.die();
+                            if (!isTeammate) {
+                                if (p1.respawnInvuln <= 0) { p1.health -= 50; }
+                                if (p2.respawnInvuln <= 0) { p2.health -= 50; }
+                            }
+                            if (p1.health <= 0) { p1.die(tankIds[j]); this._recordKill(tankIds[j], tankIds[i], 'ram'); }
+                            if (p2.health <= 0) { p2.die(tankIds[i]); this._recordKill(tankIds[i], tankIds[j], 'ram'); }
                             p1.velocity.x += t1X * -1.5; p1.velocity.z += t1Z * -1.5; p1.velocity.y = 0.4;
                             p2.velocity.x += t2X * -1.5; p2.velocity.z += t2Z * -1.5; p2.velocity.y = 0.4;
                             p1.currentSpeed = 0; p2.currentSpeed = 0;
                         } else {
                             let p1RammingP2 = (t1X * -normX + t1Z * -normZ) > 0.5; let p2RammingP1 = (t2X * normX + t2Z * normZ) > 0.5;
                             if (p1Ramming && p1RammingP2 && !p2RammingP1) {
-                                if(!isTeammate) p2.die();
+                                if (!isTeammate && p2.respawnInvuln <= 0) {
+                                    p2.health -= 90;
+                                    if (p2.health <= 0) { p2.die(tankIds[i]); this._recordKill(tankIds[i], tankIds[j], 'ram'); }
+                                }
                                 p1.currentSpeed *= 0.5;
                                 p2.velocity.x -= normX * 1.5; p2.velocity.z -= normZ * 1.5; p2.velocity.y = 0.5;
                             }
                             else if (p2Ramming && p2RammingP1 && !p1RammingP2) {
-                                if(!isTeammate) p1.die();
+                                if (!isTeammate && p1.respawnInvuln <= 0) {
+                                    p1.health -= 90;
+                                    if (p1.health <= 0) { p1.die(tankIds[j]); this._recordKill(tankIds[j], tankIds[i], 'ram'); }
+                                }
                                 p2.currentSpeed *= 0.5;
                                 p1.velocity.x += normX * 1.5; p1.velocity.z += normZ * 1.5; p1.velocity.y = 0.5;
                             }
@@ -408,6 +473,16 @@ class Match {
         state.hits = this.hits;
         state.shutters = this.shutters;
         return state;
+    }
+
+    _recordKill(killerId, victimId, weapon) {
+        const ts = Date.now();
+        if (!this.killStats[killerId]) this.killStats[killerId] = { kills: 0, deaths: 0 };
+        if (!this.killStats[victimId]) this.killStats[victimId] = { kills: 0, deaths: 0 };
+        this.killStats[killerId].kills++;
+        this.killStats[victimId].deaths++;
+        this.killFeed.push({ killer: killerId, victim: victimId, weapon: weapon || 'unknown', timestamp: ts });
+        if (this.killFeed.length > 20) this.killFeed.shift();
     }
 }
 
